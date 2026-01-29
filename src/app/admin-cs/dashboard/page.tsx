@@ -122,8 +122,12 @@ export default function AdminCSDashboardPage() {
   const [emailRecipients, setEmailRecipients] = useState<string[]>([]);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailMessage, setEmailMessage] = useState('');
-  const [availableUsers, setAvailableUsers] = useState<{ user_code: string; email: string }[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<{ user_code: string; email: string; branch_code?: string }[]>([]);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  // 법인별 개별 발송 상태
+  const [showBranchEmailModal, setShowBranchEmailModal] = useState(false);
+  const [isSendingBranchEmail, setIsSendingBranchEmail] = useState(false);
 
   // 초기 날짜 설정 (오늘)
   useEffect(() => {
@@ -136,7 +140,7 @@ export default function AdminCSDashboardPage() {
   const loadUsersWithEmail = useCallback(async () => {
     const { data: users } = await supabase
       .from('users')
-      .select('user_code, email')
+      .select('user_code, email, branch_code')
       .not('email', 'is', null)
       .neq('email', '');
 
@@ -416,6 +420,81 @@ export default function AdminCSDashboardPage() {
       toast.error('이메일 발송 중 오류가 발생했습니다.');
     } finally {
       setIsSendingEmail(false);
+    }
+  };
+
+  // 법인별 이메일이 등록된 법인 수 계산
+  const branchesWithEmail = useMemo(() => {
+    const branchEmails: Record<string, string> = {};
+    availableUsers.forEach(user => {
+      if (user.branch_code && user.email) {
+        branchEmails[user.branch_code] = user.email;
+      }
+    });
+    return branchEmails;
+  }, [availableUsers]);
+
+  // 법인별 개별 이메일 발송
+  const handleSendBranchEmails = async () => {
+    const branchesWithData = Object.keys(branchesWithEmail).filter(branch =>
+      branchStats.some(b => b.branch === branch)
+    );
+
+    if (branchesWithData.length === 0) {
+      toast.error('이메일이 등록된 법인이 없습니다.');
+      return;
+    }
+
+    setIsSendingBranchEmail(true);
+    try {
+      // 각 법인별 데이터 구성
+      const branchData: Record<string, {
+        email: string;
+        stats: { waiting: number; collected: number; shipped: number; received: number; total: number };
+        items: MaterialUsage[];
+      }> = {};
+
+      branchesWithData.forEach(branchCode => {
+        const branchItems = mainFilteredData.filter(item => item.branch_code === branchCode);
+        const stats = branchStats.find(b => b.branch === branchCode);
+
+        if (stats) {
+          branchData[branchCode] = {
+            email: branchesWithEmail[branchCode],
+            stats: {
+              waiting: stats.waiting,
+              collected: stats.collected,
+              shipped: stats.shipped,
+              received: stats.received,
+              total: stats.total,
+            },
+            items: branchItems,
+          };
+        }
+      });
+
+      const response = await fetch('/api/send-branch-emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dateFrom: isMainSearched ? appliedMainDateFrom : null,
+          dateTo: isMainSearched ? appliedMainDateTo : null,
+          branchData,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast.success(result.message);
+        setShowBranchEmailModal(false);
+      } else {
+        toast.error(result.error || '이메일 발송에 실패했습니다.');
+      }
+    } catch (error) {
+      toast.error('이메일 발송 중 오류가 발생했습니다.');
+    } finally {
+      setIsSendingBranchEmail(false);
     }
   };
 
@@ -746,12 +825,20 @@ export default function AdminCSDashboardPage() {
           <h1 className="text-2xl font-bold">전체 현황 대시보드</h1>
           <p className="text-muted-foreground">회수 자재 전체 현황을 확인합니다.</p>
         </div>
-        {availableUsers.length > 0 && (
-          <Button onClick={handleOpenEmailModal} variant="outline">
-            <Mail className="h-4 w-4 mr-2" />
-            이메일 발송
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {Object.keys(branchesWithEmail).length > 0 && (
+            <Button onClick={() => setShowBranchEmailModal(true)} variant="default">
+              <Mail className="h-4 w-4 mr-2" />
+              법인별 개별 발송
+            </Button>
+          )}
+          {availableUsers.length > 0 && (
+            <Button onClick={handleOpenEmailModal} variant="outline">
+              <Mail className="h-4 w-4 mr-2" />
+              전체 발송
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* 날짜 검색 */}
@@ -1061,6 +1148,57 @@ export default function AdminCSDashboardPage() {
               disabled={emailRecipients.length === 0 || isSendingEmail}
             >
               {isSendingEmail ? '발송 중...' : '이메일 발송'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 법인별 개별 발송 확인 모달 */}
+      <Dialog open={showBranchEmailModal} onOpenChange={setShowBranchEmailModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>법인별 개별 이메일 발송</DialogTitle>
+            <DialogDescription>
+              각 법인에게 해당 법인의 데이터만 포함된 이메일을 개별 발송합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm font-medium text-blue-800 mb-2">발송 대상 법인:</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(branchesWithEmail)
+                  .filter(([branch]) => branchStats.some(b => b.branch === branch))
+                  .map(([branch, email]) => (
+                    <Badge key={branch} variant="outline" className="bg-white">
+                      {branch}
+                    </Badge>
+                  ))}
+              </div>
+              <p className="text-xs text-blue-600 mt-2">
+                총 {Object.keys(branchesWithEmail).filter(b => branchStats.some(bs => bs.branch === b)).length}개 법인
+              </p>
+            </div>
+
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                <strong>조회 기간:</strong> {isMainSearched ? `${appliedMainDateFrom} ~ ${appliedMainDateTo}` : '전체 기간'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                각 법인의 회수대기, 회수완료 현황이 개별적으로 발송됩니다.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBranchEmailModal(false)}>
+              취소
+            </Button>
+            <Button
+              onClick={handleSendBranchEmails}
+              disabled={isSendingBranchEmail}
+            >
+              {isSendingBranchEmail ? '발송 중...' : '개별 발송 시작'}
             </Button>
           </DialogFooter>
         </DialogContent>
