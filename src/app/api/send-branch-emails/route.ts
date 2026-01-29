@@ -41,11 +41,15 @@ export async function POST(request: NextRequest) {
 
     // DB에서 이메일 설정 가져오기
     const settings = await getEmailSettings();
-    const emailFrom = settings.email_from || 'onboarding@resend.dev';
+    // 항상 onboarding@resend.dev 사용 (도메인 인증 전)
+    const emailFrom = 'onboarding@resend.dev';
     const emailFromName = settings.email_from_name || '쿠쿠 부품회수시스템';
     const apiKey = process.env.RESEND_API_KEY || settings.resend_api_key;
 
+    console.log('Email settings:', { emailFrom, emailFromName, hasApiKey: !!apiKey });
+
     if (!apiKey || apiKey.length === 0) {
+      console.error('No API key found');
       return NextResponse.json(
         { error: 'Resend API Key가 설정되지 않았습니다.' },
         { status: 400 }
@@ -116,6 +120,7 @@ export async function POST(request: NextRequest) {
 
       // Resend API로 발송
       try {
+        console.log(`Sending email to ${branchCode}: ${branchInfo.email}`);
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
@@ -130,13 +135,16 @@ export async function POST(request: NextRequest) {
           }),
         });
 
+        const responseData = await response.json();
+        console.log(`Response for ${branchCode}:`, response.status, responseData);
+
         if (response.ok) {
           results.push({ branch: branchCode, success: true });
         } else {
-          const errorData = await response.json();
-          results.push({ branch: branchCode, success: false, error: errorData.message });
+          results.push({ branch: branchCode, success: false, error: responseData.message || '발송 실패' });
         }
       } catch (error) {
+        console.error(`Error for ${branchCode}:`, error);
         results.push({ branch: branchCode, success: false, error: '발송 오류' });
       }
     }

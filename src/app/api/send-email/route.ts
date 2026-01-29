@@ -45,9 +45,12 @@ export async function POST(request: NextRequest) {
 
     // DB에서 이메일 설정 가져오기
     const settings = await getEmailSettings();
-    const emailFrom = settings.email_from || 'onboarding@resend.dev';
+    // 항상 onboarding@resend.dev 사용 (도메인 인증 전)
+    const emailFrom = 'onboarding@resend.dev';
     const emailFromName = settings.email_from_name || '쿠쿠 부품회수시스템';
     const dbApiKey = settings.resend_api_key;
+
+    console.log('Email settings:', { emailFrom, emailFromName, hasApiKey: !!dbApiKey });
 
     // 환경변수 우선, 없으면 DB 설정 사용
     const apiKey = process.env.RESEND_API_KEY || dbApiKey;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Package, Clock, TruckIcon, CheckCircle2, AlertTriangle, Search, Printer } from 'lucide-react';
+import { Package, Clock, TruckIcon, CheckCircle2, AlertTriangle, Search, Printer, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -153,6 +153,37 @@ export default function BranchDashboardPage() {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [waitingData]);
 
+  // 기사별 전체 현황 통계 (전체 데이터 기준)
+  const technicianStats = useMemo(() => {
+    const stats: Record<string, { waiting: number; collected: number; shipped: number; total: number }> = {};
+
+    branchData.forEach(item => {
+      const tech = item.technician_code || '미지정';
+      if (!stats[tech]) {
+        stats[tech] = { waiting: 0, collected: 0, shipped: 0, total: 0 };
+      }
+      stats[tech].total++;
+
+      switch (item.status) {
+        case '회수대기':
+          stats[tech].waiting++;
+          break;
+        case '회수완료':
+          stats[tech].collected++;
+          break;
+        case '발송':
+        case '입고완료':
+          stats[tech].shipped++;
+          break;
+      }
+    });
+
+    // 정렬: 회수대기 많은 순 → 전체 많은 순
+    return Object.entries(stats)
+      .map(([tech, data]) => ({ tech, ...data }))
+      .sort((a, b) => b.waiting - a.waiting || b.total - a.total);
+  }, [branchData]);
+
   // 6일 경과 회수완료 건 체크
   const overdueItems = useMemo(() => {
     const sixDaysAgo = new Date();
@@ -291,6 +322,54 @@ export default function BranchDashboardPage() {
           className="border-l-4 border-l-blue-500"
         />
       </div>
+
+      {/* 기사별 회수 현황 */}
+      {technicianStats.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              기사별 회수 현황
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {technicianStats.slice(0, 9).map(({ tech, waiting, collected, shipped, total }) => {
+                const completedRate = total > 0 ? Math.round(((collected + shipped) / total) * 100) : 0;
+                return (
+                  <div
+                    key={tech}
+                    className={`p-3 rounded-lg border ${waiting > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <Badge variant="outline" className="font-semibold">{tech}</Badge>
+                      <span className="text-xs text-muted-foreground">총 {total}건</span>
+                    </div>
+                    {/* 진행률 바 */}
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all"
+                        style={{ width: `${completedRate}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-red-600 font-medium">대기 {waiting}</span>
+                      <span className="text-amber-600">완료 {collected}</span>
+                      <span className="text-blue-600">발송 {shipped}</span>
+                      <span className="text-green-600 font-medium">{completedRate}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {technicianStats.length > 9 && (
+              <p className="text-xs text-muted-foreground mt-3 text-center">
+                외 {technicianStats.length - 9}명의 기사
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 6일 경과 경고 */}
       {overdueItems.length > 0 && showOverdueWarning && (

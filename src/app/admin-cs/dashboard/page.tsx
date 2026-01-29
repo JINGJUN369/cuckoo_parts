@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Package, TruckIcon, PackageCheck, Clock, Search, ChevronLeft, Mail, Calendar } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { StatusBadge } from '@/components/common/StatusBadge';
@@ -1025,6 +1025,85 @@ export default function AdminCSDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 법인별 현황 히트맵 */}
+      {branchStats.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">법인별 현황 히트맵</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <div className="inline-grid gap-1" style={{ gridTemplateColumns: 'auto repeat(4, 80px)' }}>
+                {/* 헤더 */}
+                <div className="p-2 font-medium text-center bg-gray-100 rounded">법인</div>
+                <div className="p-2 font-medium text-center bg-red-100 text-red-700 rounded">회수대기</div>
+                <div className="p-2 font-medium text-center bg-amber-100 text-amber-700 rounded">회수완료</div>
+                <div className="p-2 font-medium text-center bg-blue-100 text-blue-700 rounded">발송</div>
+                <div className="p-2 font-medium text-center bg-green-100 text-green-700 rounded">입고완료</div>
+
+                {/* 데이터 행 */}
+                {branchStats.slice(0, 15).map((branch) => {
+                  const maxVal = Math.max(branch.waiting, branch.collected, branch.shipped, branch.received, 1);
+                  const getOpacity = (val: number) => Math.max(0.2, val / maxVal);
+
+                  return (
+                    <React.Fragment key={branch.branch}>
+                      <div
+                        className="p-2 font-medium text-center bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSelectBranch(branch.branch)}
+                      >
+                        {branch.branch}
+                      </div>
+                      <div
+                        className="p-2 text-center rounded font-medium"
+                        style={{
+                          backgroundColor: `rgba(239, 68, 68, ${getOpacity(branch.waiting)})`,
+                          color: branch.waiting > maxVal * 0.5 ? 'white' : '#b91c1c'
+                        }}
+                      >
+                        {branch.waiting}
+                      </div>
+                      <div
+                        className="p-2 text-center rounded font-medium"
+                        style={{
+                          backgroundColor: `rgba(245, 158, 11, ${getOpacity(branch.collected)})`,
+                          color: branch.collected > maxVal * 0.5 ? 'white' : '#b45309'
+                        }}
+                      >
+                        {branch.collected}
+                      </div>
+                      <div
+                        className="p-2 text-center rounded font-medium"
+                        style={{
+                          backgroundColor: `rgba(59, 130, 246, ${getOpacity(branch.shipped)})`,
+                          color: branch.shipped > maxVal * 0.5 ? 'white' : '#1d4ed8'
+                        }}
+                      >
+                        {branch.shipped}
+                      </div>
+                      <div
+                        className="p-2 text-center rounded font-medium"
+                        style={{
+                          backgroundColor: `rgba(34, 197, 94, ${getOpacity(branch.received)})`,
+                          color: branch.received > maxVal * 0.5 ? 'white' : '#15803d'
+                        }}
+                      >
+                        {branch.received}
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+            {branchStats.length > 15 && (
+              <p className="text-sm text-muted-foreground mt-3 text-center">
+                상위 15개 법인 표시 (전체 {branchStats.length}개)
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 법인별 현황 테이블 - 클릭하여 상세보기 */}
       <Card>
