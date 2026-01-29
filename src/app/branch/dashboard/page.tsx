@@ -30,6 +30,39 @@ import { useAuth } from '@/hooks/useAuth';
 import { MaterialUsage, Carrier } from '@/types';
 import { toast } from 'sonner';
 
+// 날짜 프리셋 타입
+type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth';
+
+// 날짜 프리셋 계산 함수
+function getDateRange(preset: DatePreset): { from: string; to: string } {
+  const today = new Date();
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  switch (preset) {
+    case 'today':
+      return { from: formatDate(today), to: formatDate(today) };
+    case 'yesterday': {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { from: formatDate(yesterday), to: formatDate(yesterday) };
+    }
+    case 'week': {
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 6);
+      return { from: formatDate(weekAgo), to: formatDate(today) };
+    }
+    case 'thisMonth': {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { from: formatDate(firstDay), to: formatDate(today) };
+    }
+    case 'lastMonth': {
+      const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      return { from: formatDate(lastMonthStart), to: formatDate(lastMonthEnd) };
+    }
+  }
+}
+
 export default function BranchDashboardPage() {
   const [selectedItem, setSelectedItem] = useState<MaterialUsage | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -45,6 +78,7 @@ export default function BranchDashboardPage() {
   const [appliedDateFrom, setAppliedDateFrom] = useState('');
   const [appliedDateTo, setAppliedDateTo] = useState('');
   const [isSearched, setIsSearched] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState<DatePreset | null>('today');
 
   const { getByBranch, updateStatus, updateStatusBulk, getCarriers } = useMaterialUsage();
   const { session } = useAuth();
@@ -71,6 +105,14 @@ export default function BranchDashboardPage() {
     if (!session?.branchCode) return [];
     return getByBranch(session.branchCode);
   }, [getByBranch, session]);
+
+  // 날짜 프리셋 선택
+  const handlePresetSelect = (preset: DatePreset) => {
+    const range = getDateRange(preset);
+    setSearchDateFrom(range.from);
+    setSearchDateTo(range.to);
+    setSelectedPreset(preset);
+  };
 
   // 검색 실행
   const handleSearch = () => {
@@ -275,35 +317,83 @@ export default function BranchDashboardPage() {
           <CardTitle className="text-base">날짜 검색</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">시작일</label>
-              <Input
-                type="date"
-                value={searchDateFrom}
-                onChange={(e) => setSearchDateFrom(e.target.value)}
-                className="w-44"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">종료일</label>
-              <Input
-                type="date"
-                value={searchDateTo}
-                onChange={(e) => setSearchDateTo(e.target.value)}
-                className="w-44"
-              />
-            </div>
-            <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700">
-              <Search className="h-4 w-4 mr-2" />
-              검색
-            </Button>
-            {isSearched && (
-              <Button variant="outline" onClick={handlePrint} className="print:hidden">
-                <Printer className="h-4 w-4 mr-2" />
-                인쇄
+          <div className="space-y-3">
+            {/* 빠른 선택 버튼 */}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={selectedPreset === 'today' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetSelect('today')}
+              >
+                오늘
               </Button>
-            )}
+              <Button
+                variant={selectedPreset === 'yesterday' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetSelect('yesterday')}
+              >
+                어제
+              </Button>
+              <Button
+                variant={selectedPreset === 'week' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetSelect('week')}
+              >
+                1주일
+              </Button>
+              <Button
+                variant={selectedPreset === 'thisMonth' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetSelect('thisMonth')}
+              >
+                이번달
+              </Button>
+              <Button
+                variant={selectedPreset === 'lastMonth' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetSelect('lastMonth')}
+              >
+                저번달
+              </Button>
+            </div>
+
+            {/* 날짜 입력 */}
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="space-y-1">
+                <label className="text-sm text-muted-foreground">시작일</label>
+                <Input
+                  type="date"
+                  value={searchDateFrom}
+                  onChange={(e) => {
+                    setSearchDateFrom(e.target.value);
+                    setSelectedPreset(null);
+                  }}
+                  className="w-44"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-muted-foreground">종료일</label>
+                <Input
+                  type="date"
+                  value={searchDateTo}
+                  onChange={(e) => {
+                    setSearchDateTo(e.target.value);
+                    setSelectedPreset(null);
+                  }}
+                  className="w-44"
+                />
+              </div>
+              <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700">
+                <Search className="h-4 w-4 mr-2" />
+                검색
+              </Button>
+              {isSearched && (
+                <Button variant="outline" onClick={handlePrint} className="print:hidden">
+                  <Printer className="h-4 w-4 mr-2" />
+                  인쇄
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

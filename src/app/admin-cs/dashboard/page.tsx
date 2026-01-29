@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
-import { Package, TruckIcon, PackageCheck, Clock, Search, ChevronLeft } from 'lucide-react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
+import { Package, TruckIcon, PackageCheck, Clock, Search, ChevronLeft, Mail, Calendar } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
@@ -28,6 +28,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
   BarChart,
   Bar,
   XAxis,
@@ -42,6 +52,7 @@ import {
 } from 'recharts';
 import { MaterialUsage, RecoveryStatus } from '@/types';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 const STATUS_COLORS = {
   '회수대기': '#ef4444',
@@ -50,17 +61,93 @@ const STATUS_COLORS = {
   '입고완료': '#22c55e',
 };
 
+// 날짜 프리셋 타입
+type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth';
+
+// 날짜 프리셋 계산 함수
+function getDateRange(preset: DatePreset): { from: string; to: string } {
+  const today = new Date();
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  switch (preset) {
+    case 'today':
+      return { from: formatDate(today), to: formatDate(today) };
+    case 'yesterday': {
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { from: formatDate(yesterday), to: formatDate(yesterday) };
+    }
+    case 'week': {
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 6);
+      return { from: formatDate(weekAgo), to: formatDate(today) };
+    }
+    case 'thisMonth': {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { from: formatDate(firstDay), to: formatDate(today) };
+    }
+    case 'lastMonth': {
+      const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+      return { from: formatDate(lastMonthStart), to: formatDate(lastMonthEnd) };
+    }
+  }
+}
+
 export default function AdminCSDashboardPage() {
   const { data, getStats, getRecoveryTargets, updateStatus } = useMaterialUsage();
   const { session } = useAuth();
 
   // 법인 상세 보기 상태
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
+
+  // 메인 대시보드 날짜 필터
+  const [mainDateFrom, setMainDateFrom] = useState('');
+  const [mainDateTo, setMainDateTo] = useState('');
+  const [appliedMainDateFrom, setAppliedMainDateFrom] = useState('');
+  const [appliedMainDateTo, setAppliedMainDateTo] = useState('');
+  const [isMainSearched, setIsMainSearched] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState<DatePreset | null>(null);
+
+  // 법인 상세 날짜 필터
   const [searchDateFrom, setSearchDateFrom] = useState('');
   const [searchDateTo, setSearchDateTo] = useState('');
   const [appliedDateFrom, setAppliedDateFrom] = useState('');
   const [appliedDateTo, setAppliedDateTo] = useState('');
   const [isSearched, setIsSearched] = useState(false);
+  const [branchSelectedPreset, setBranchSelectedPreset] = useState<DatePreset | null>(null);
+
+  // 이메일 모달 상태
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailRecipients, setEmailRecipients] = useState<string[]>([]);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [availableUsers, setAvailableUsers] = useState<{ user_code: string; email: string }[]>([]);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  // 초기 날짜 설정 (오늘)
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setMainDateFrom(today);
+    setMainDateTo(today);
+  }, []);
+
+  // 이메일이 등록된 사용자 목록 로드
+  const loadUsersWithEmail = useCallback(async () => {
+    const { data: users } = await supabase
+      .from('users')
+      .select('user_code, email')
+      .not('email', 'is', null)
+      .neq('email', '');
+
+    if (users) {
+      setAvailableUsers(users);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadUsersWithEmail();
+  }, [loadUsersWithEmail]);
 
   const stats = useMemo(() => getStats(), [getStats]);
   const recoveryTargets = useMemo(() => getRecoveryTargets(), [getRecoveryTargets]);
@@ -72,19 +159,43 @@ export default function AdminCSDashboardPage() {
     return Array.from(branches).sort();
   }, [recoveryTargets]);
 
+  // 메인 대시보드 날짜 필터링된 데이터
+  const mainFilteredData = useMemo(() => {
+    if (!isMainSearched) return recoveryTargets;
+
+    return recoveryTargets.filter(item => {
+      const itemDate = item.process_time || item.receipt_time || item.created_at;
+      if (itemDate) {
+        const itemDateOnly = itemDate.split('T')[0];
+        if (appliedMainDateFrom && itemDateOnly < appliedMainDateFrom) return false;
+        if (appliedMainDateTo && itemDateOnly > appliedMainDateTo) return false;
+      }
+      return true;
+    });
+  }, [recoveryTargets, appliedMainDateFrom, appliedMainDateTo, isMainSearched]);
+
+  // 필터링된 통계
+  const filteredStats = useMemo(() => {
+    const waiting = mainFilteredData.filter(item => item.status === '회수대기').length;
+    const collected = mainFilteredData.filter(item => item.status === '회수완료').length;
+    const shipped = mainFilteredData.filter(item => item.status === '발송').length;
+    const received = mainFilteredData.filter(item => item.status === '입고완료').length;
+    return { total: mainFilteredData.length, waiting, collected, shipped, received };
+  }, [mainFilteredData]);
+
   // 상태별 분포 (파이 차트용)
   const statusDistribution = useMemo(() => [
-    { name: '회수대기', value: stats.waiting, color: STATUS_COLORS['회수대기'] },
-    { name: '회수완료', value: stats.collected, color: STATUS_COLORS['회수완료'] },
-    { name: '발송', value: stats.shipped, color: STATUS_COLORS['발송'] },
-    { name: '입고완료', value: stats.received, color: STATUS_COLORS['입고완료'] },
-  ], [stats]);
+    { name: '회수대기', value: filteredStats.waiting, color: STATUS_COLORS['회수대기'] },
+    { name: '회수완료', value: filteredStats.collected, color: STATUS_COLORS['회수완료'] },
+    { name: '발송', value: filteredStats.shipped, color: STATUS_COLORS['발송'] },
+    { name: '입고완료', value: filteredStats.received, color: STATUS_COLORS['입고완료'] },
+  ], [filteredStats]);
 
-  // 법인별 현황 (바 차트용)
+  // 법인별 현황 (바 차트용) - 필터링된 데이터 기준
   const branchStats = useMemo(() => {
     const branchMap: Record<string, { waiting: number; collected: number; shipped: number; received: number }> = {};
 
-    recoveryTargets.forEach((item) => {
+    mainFilteredData.forEach((item) => {
       if (!branchMap[item.branch_code]) {
         branchMap[item.branch_code] = { waiting: 0, collected: 0, shipped: 0, received: 0 };
       }
@@ -112,15 +223,45 @@ export default function AdminCSDashboardPage() {
         total: counts.waiting + counts.collected + counts.shipped + counts.received,
       }))
       .sort((a, b) => b.total - a.total);
-  }, [recoveryTargets]);
+  }, [mainFilteredData]);
 
-  // 법인 선택 시 오늘 날짜 기본값 설정
+  // 메인 날짜 프리셋 선택
+  const handleMainPresetSelect = (preset: DatePreset) => {
+    const range = getDateRange(preset);
+    setMainDateFrom(range.from);
+    setMainDateTo(range.to);
+    setSelectedPreset(preset);
+  };
+
+  // 메인 검색 실행
+  const handleMainSearch = () => {
+    setAppliedMainDateFrom(mainDateFrom);
+    setAppliedMainDateTo(mainDateTo);
+    setIsMainSearched(true);
+  };
+
+  // 전체 보기 (필터 초기화)
+  const handleShowAll = () => {
+    setIsMainSearched(false);
+    setSelectedPreset(null);
+  };
+
+  // 법인 선택 시 날짜 프리셋 적용
   const handleSelectBranch = (branch: string) => {
     setSelectedBranch(branch);
     const today = new Date().toISOString().split('T')[0];
     setSearchDateFrom(today);
     setSearchDateTo(today);
     setIsSearched(false);
+    setBranchSelectedPreset('today');
+  };
+
+  // 법인 상세 날짜 프리셋 선택
+  const handleBranchPresetSelect = (preset: DatePreset) => {
+    const range = getDateRange(preset);
+    setSearchDateFrom(range.from);
+    setSearchDateTo(range.to);
+    setBranchSelectedPreset(preset);
   };
 
   // 검색 실행
@@ -196,6 +337,88 @@ export default function AdminCSDashboardPage() {
     shipped: shippedData.length,
   }), [searchedData, waitingData, collectedData, shippedData]);
 
+  // 이메일 모달 열기
+  const handleOpenEmailModal = () => {
+    // 기본 제목 설정
+    const dateRange = isMainSearched
+      ? `${appliedMainDateFrom} ~ ${appliedMainDateTo}`
+      : '전체';
+    setEmailSubject(`[부품회수] ${dateRange} 현황 리포트`);
+
+    // 기본 메시지 생성
+    const message = generateEmailContent();
+    setEmailMessage(message);
+    setShowEmailModal(true);
+  };
+
+  // 이메일 내용 생성
+  const generateEmailContent = () => {
+    const dateRange = isMainSearched
+      ? `${appliedMainDateFrom} ~ ${appliedMainDateTo}`
+      : '전체 기간';
+
+    let content = `부품 회수 현황 리포트\n`;
+    content += `조회 기간: ${dateRange}\n`;
+    content += `발송 일시: ${new Date().toLocaleString('ko-KR')}\n\n`;
+    content += `=== 전체 현황 ===\n`;
+    content += `총 회수대상: ${filteredStats.total}건\n`;
+    content += `회수대기: ${filteredStats.waiting}건\n`;
+    content += `회수완료: ${filteredStats.collected}건\n`;
+    content += `발송: ${filteredStats.shipped}건\n`;
+    content += `입고완료: ${filteredStats.received}건\n\n`;
+    content += `=== 법인별 현황 ===\n`;
+
+    branchStats.slice(0, 20).forEach(branch => {
+      content += `${branch.branch}: 대기 ${branch.waiting} / 완료 ${branch.collected} / 발송 ${branch.shipped} / 입고 ${branch.received}\n`;
+    });
+
+    return content;
+  };
+
+  // 이메일 수신자 토글
+  const handleToggleRecipient = (email: string) => {
+    setEmailRecipients(prev =>
+      prev.includes(email)
+        ? prev.filter(e => e !== email)
+        : [...prev, email]
+    );
+  };
+
+  // 이메일 발송
+  const handleSendEmail = async () => {
+    if (emailRecipients.length === 0) {
+      toast.error('수신자를 선택해주세요.');
+      return;
+    }
+
+    setIsSendingEmail(true);
+    try {
+      // API 호출 (실제 이메일 발송)
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipients: emailRecipients,
+          subject: emailSubject,
+          message: emailMessage,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(`${emailRecipients.length}명에게 이메일이 발송되었습니다.`);
+        setShowEmailModal(false);
+        setEmailRecipients([]);
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || '이메일 발송에 실패했습니다.');
+      }
+    } catch (error) {
+      toast.error('이메일 발송 중 오류가 발생했습니다.');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   // 법인 상세 보기 모드
   if (selectedBranch) {
     return (
@@ -227,19 +450,77 @@ export default function AdminCSDashboardPage() {
             <CardTitle className="text-base">날짜 검색</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-4 items-end">
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">시작일</label>
-                <Input type="date" value={searchDateFrom} onChange={(e) => setSearchDateFrom(e.target.value)} className="w-44" />
+            <div className="space-y-3">
+              {/* 빠른 선택 버튼 */}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={branchSelectedPreset === 'today' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleBranchPresetSelect('today')}
+                >
+                  오늘
+                </Button>
+                <Button
+                  variant={branchSelectedPreset === 'yesterday' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleBranchPresetSelect('yesterday')}
+                >
+                  어제
+                </Button>
+                <Button
+                  variant={branchSelectedPreset === 'week' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleBranchPresetSelect('week')}
+                >
+                  1주일
+                </Button>
+                <Button
+                  variant={branchSelectedPreset === 'thisMonth' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleBranchPresetSelect('thisMonth')}
+                >
+                  이번달
+                </Button>
+                <Button
+                  variant={branchSelectedPreset === 'lastMonth' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleBranchPresetSelect('lastMonth')}
+                >
+                  저번달
+                </Button>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm text-muted-foreground">종료일</label>
-                <Input type="date" value={searchDateTo} onChange={(e) => setSearchDateTo(e.target.value)} className="w-44" />
+
+              {/* 날짜 입력 */}
+              <div className="flex flex-wrap gap-4 items-end">
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">시작일</label>
+                  <Input
+                    type="date"
+                    value={searchDateFrom}
+                    onChange={(e) => {
+                      setSearchDateFrom(e.target.value);
+                      setBranchSelectedPreset(null);
+                    }}
+                    className="w-44"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm text-muted-foreground">종료일</label>
+                  <Input
+                    type="date"
+                    value={searchDateTo}
+                    onChange={(e) => {
+                      setSearchDateTo(e.target.value);
+                      setBranchSelectedPreset(null);
+                    }}
+                    className="w-44"
+                  />
+                </div>
+                <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700">
+                  <Search className="h-4 w-4 mr-2" />
+                  검색
+                </Button>
               </div>
-              <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700">
-                <Search className="h-4 w-4 mr-2" />
-                검색
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -460,17 +741,149 @@ export default function AdminCSDashboardPage() {
   return (
     <div className="space-y-6">
       {/* 헤더 */}
-      <div>
-        <h1 className="text-2xl font-bold">전체 현황 대시보드</h1>
-        <p className="text-muted-foreground">회수 자재 전체 현황을 확인합니다.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">전체 현황 대시보드</h1>
+          <p className="text-muted-foreground">회수 자재 전체 현황을 확인합니다.</p>
+        </div>
+        {availableUsers.length > 0 && (
+          <Button onClick={handleOpenEmailModal} variant="outline">
+            <Mail className="h-4 w-4 mr-2" />
+            이메일 발송
+          </Button>
+        )}
       </div>
+
+      {/* 날짜 검색 */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            기간 검색
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {/* 빠른 선택 버튼 */}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={selectedPreset === 'today' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleMainPresetSelect('today')}
+              >
+                오늘
+              </Button>
+              <Button
+                variant={selectedPreset === 'yesterday' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleMainPresetSelect('yesterday')}
+              >
+                어제
+              </Button>
+              <Button
+                variant={selectedPreset === 'week' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleMainPresetSelect('week')}
+              >
+                1주일
+              </Button>
+              <Button
+                variant={selectedPreset === 'thisMonth' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleMainPresetSelect('thisMonth')}
+              >
+                이번달
+              </Button>
+              <Button
+                variant={selectedPreset === 'lastMonth' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleMainPresetSelect('lastMonth')}
+              >
+                저번달
+              </Button>
+              {isMainSearched && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleShowAll}
+                  className="text-muted-foreground"
+                >
+                  전체보기
+                </Button>
+              )}
+            </div>
+
+            {/* 날짜 입력 */}
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="space-y-1">
+                <label className="text-sm text-muted-foreground">시작일</label>
+                <Input
+                  type="date"
+                  value={mainDateFrom}
+                  onChange={(e) => {
+                    setMainDateFrom(e.target.value);
+                    setSelectedPreset(null);
+                  }}
+                  className="w-44"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm text-muted-foreground">종료일</label>
+                <Input
+                  type="date"
+                  value={mainDateTo}
+                  onChange={(e) => {
+                    setMainDateTo(e.target.value);
+                    setSelectedPreset(null);
+                  }}
+                  className="w-44"
+                />
+              </div>
+              <Button onClick={handleMainSearch} className="bg-blue-600 hover:bg-blue-700">
+                <Search className="h-4 w-4 mr-2" />
+                검색
+              </Button>
+            </div>
+
+            {/* 검색 기간 표시 */}
+            {isMainSearched && (
+              <div className="text-sm text-muted-foreground pt-2 border-t">
+                검색 기간: <strong>{appliedMainDateFrom}</strong> ~ <strong>{appliedMainDateTo}</strong>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 통계 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="총 회수대상" value={stats.total.toLocaleString()} icon={Package} description="전체 회수대상 건수" />
-        <StatCard title="회수대기" value={stats.waiting.toLocaleString()} icon={Clock} description="회수 대기 중인 건수" className="border-l-4 border-l-red-500" />
-        <StatCard title="발송중" value={stats.shipped.toLocaleString()} icon={TruckIcon} description="발송 진행 중인 건수" className="border-l-4 border-l-blue-500" />
-        <StatCard title="입고완료" value={stats.received.toLocaleString()} icon={PackageCheck} description="입고 완료된 건수" className="border-l-4 border-l-green-500" />
+        <StatCard
+          title="총 회수대상"
+          value={filteredStats.total.toLocaleString()}
+          icon={Package}
+          description={isMainSearched ? "조회 기간 기준" : "전체 기간"}
+        />
+        <StatCard
+          title="회수대기"
+          value={filteredStats.waiting.toLocaleString()}
+          icon={Clock}
+          description="회수 대기 중인 건수"
+          className="border-l-4 border-l-red-500"
+        />
+        <StatCard
+          title="발송중"
+          value={filteredStats.shipped.toLocaleString()}
+          icon={TruckIcon}
+          description="발송 진행 중인 건수"
+          className="border-l-4 border-l-blue-500"
+        />
+        <StatCard
+          title="입고완료"
+          value={filteredStats.received.toLocaleString()}
+          icon={PackageCheck}
+          description="입고 완료된 건수"
+          className="border-l-4 border-l-green-500"
+        />
       </div>
 
       {/* 차트 영역 */}
@@ -481,7 +894,7 @@ export default function AdminCSDashboardPage() {
             <CardTitle className="text-lg">상태별 분포</CardTitle>
           </CardHeader>
           <CardContent>
-            {stats.total > 0 ? (
+            {filteredStats.total > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie data={statusDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
@@ -570,10 +983,88 @@ export default function AdminCSDashboardPage() {
               </TableBody>
             </Table>
           ) : (
-            <div className="py-8 text-center text-muted-foreground">아직 데이터가 없습니다.</div>
+            <div className="py-8 text-center text-muted-foreground">
+              {isMainSearched ? '해당 기간에 데이터가 없습니다.' : '아직 데이터가 없습니다.'}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {/* 이메일 발송 모달 */}
+      <Dialog open={showEmailModal} onOpenChange={setShowEmailModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>현황 리포트 이메일 발송</DialogTitle>
+            <DialogDescription>
+              현재 조회된 현황을 이메일로 발송합니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* 수신자 선택 */}
+            <div className="space-y-2">
+              <Label>수신자 선택</Label>
+              <div className="border rounded-lg p-3 max-h-40 overflow-y-auto">
+                {availableUsers.length > 0 ? (
+                  <div className="space-y-2">
+                    {availableUsers.map((user) => (
+                      <div key={user.email} className="flex items-center gap-2">
+                        <Checkbox
+                          id={user.email}
+                          checked={emailRecipients.includes(user.email)}
+                          onCheckedChange={() => handleToggleRecipient(user.email)}
+                        />
+                        <label htmlFor={user.email} className="text-sm cursor-pointer flex-1">
+                          {user.user_code} ({user.email})
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">이메일이 등록된 사용자가 없습니다.</p>
+                )}
+              </div>
+              {emailRecipients.length > 0 && (
+                <p className="text-sm text-muted-foreground">{emailRecipients.length}명 선택됨</p>
+              )}
+            </div>
+
+            {/* 제목 */}
+            <div className="space-y-2">
+              <Label htmlFor="subject">제목</Label>
+              <Input
+                id="subject"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+              />
+            </div>
+
+            {/* 내용 */}
+            <div className="space-y-2">
+              <Label htmlFor="message">내용</Label>
+              <Textarea
+                id="message"
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                rows={12}
+                className="font-mono text-sm"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailModal(false)}>
+              취소
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={emailRecipients.length === 0 || isSendingEmail}
+            >
+              {isSendingEmail ? '발송 중...' : '이메일 발송'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
