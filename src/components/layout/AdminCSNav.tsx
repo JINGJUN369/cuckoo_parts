@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { APP_VERSION } from '@/lib/version';
 
 const navItems = [
   { href: '/admin-cs/dashboard', label: '대시보드', icon: LayoutDashboard },
@@ -40,6 +41,7 @@ export function AdminCSNav() {
         <div className="flex items-center gap-2">
           <Package className="h-6 w-6 text-blue-600" />
           <span className="font-bold text-lg">부품 회수 관리</span>
+          <span className="text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
         </div>
         <p className="text-xs text-muted-foreground mt-1">고객만족팀CS</p>
       </div>

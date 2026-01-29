@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { APP_VERSION } from '@/lib/version';
 
 const navItems = [
   { href: '/admin-quality/dashboard', label: '발송현황', icon: LayoutDashboard },
@@ -34,6 +35,7 @@ export function AdminQualityNav() {
         <div className="flex items-center gap-2">
           <Package className="h-6 w-6 text-green-600" />
           <span className="font-bold text-lg">부품 회수 관리</span>
+          <span className="text-xs text-green-500 bg-green-50 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
         </div>
         <p className="text-xs text-muted-foreground mt-1">CUCKOO품질팀</p>
       </div>

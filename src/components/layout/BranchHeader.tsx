@@ -4,6 +4,7 @@ import { Package, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { APP_VERSION } from '@/lib/version';
 
 export function BranchHeader() {
   const router = useRouter();
@@ -20,7 +21,10 @@ export function BranchHeader() {
         <div className="flex items-center gap-3">
           <Package className="h-6 w-6 text-orange-600" />
           <div>
-            <h1 className="font-bold text-lg">부품 회수 관리</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-lg">부품 회수 관리</h1>
+              <span className="text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
+            </div>
             <p className="text-sm text-muted-foreground">
               설치법인: {session?.branchCode}
             </p>
