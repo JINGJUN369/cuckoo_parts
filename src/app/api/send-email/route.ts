@@ -52,6 +52,10 @@ export async function POST(request: NextRequest) {
     // 환경변수 우선, 없으면 DB 설정 사용
     const apiKey = process.env.RESEND_API_KEY || dbApiKey;
 
+    // 자동발송 안내 문구 추가
+    const noReplyFooter = '\n\n---\n※ 본 메일은 자동발송되는 메일입니다. 회신하실 수 없습니다.\n   문의사항은 담당자에게 직접 연락해 주세요.';
+    const fullMessage = message + noReplyFooter;
+
     if (apiKey && apiKey.length > 0) {
       // Resend API 사용
       const response = await fetch('https://api.resend.com/emails', {
@@ -63,8 +67,8 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           from: `${emailFromName} <${emailFrom}>`,
           to: recipients,
-          subject: subject,
-          text: message,
+          subject: `[자동발송] ${subject}`,
+          text: fullMessage,
         }),
       });
 
@@ -89,8 +93,8 @@ export async function POST(request: NextRequest) {
     console.log('=== 이메일 발송 시뮬레이션 ===');
     console.log('발송자:', `${emailFromName} <${emailFrom}>`);
     console.log('수신자:', recipients);
-    console.log('제목:', subject);
-    console.log('내용:', message);
+    console.log('제목:', `[자동발송] ${subject}`);
+    console.log('내용:', fullMessage);
     console.log('===============================');
 
     return NextResponse.json({
