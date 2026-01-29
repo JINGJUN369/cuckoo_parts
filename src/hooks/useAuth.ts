@@ -273,6 +273,28 @@ export function useAuth() {
     return data || [];
   }, [session]);
 
+  // 사용자 이메일 수정 (관리자 전용)
+  const updateUserEmail = useCallback(async (targetUserCode: string, email: string): Promise<{ success: boolean; error?: string }> => {
+    if (!session || session.userType !== 'admin_cs') {
+      return { success: false, error: '권한이 없습니다.' };
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update({
+        email: email || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_code', targetUserCode);
+
+    if (error) {
+      console.error('Email update error:', error);
+      return { success: false, error: '이메일 수정 중 오류가 발생했습니다.' };
+    }
+
+    return { success: true };
+  }, [session]);
+
   return {
     session,
     isLoading,
@@ -281,6 +303,7 @@ export function useAuth() {
     changePassword,
     resetPassword,
     getUsers,
+    updateUserEmail,
     requirePasswordChange,
     setRequirePasswordChange,
     isAuthenticated: !!session,

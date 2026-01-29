@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, RefreshCw, UserCog, Key } from 'lucide-react';
+import { Search, RefreshCw, UserCog, Key, Mail, Pencil } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -44,7 +45,10 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
-  const { getUsers, resetPassword } = useAuth();
+  const [emailEditTarget, setEmailEditTarget] = useState<User | null>(null);
+  const [editEmail, setEditEmail] = useState('');
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const { getUsers, resetPassword, updateUserEmail } = useAuth();
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -71,7 +75,8 @@ export default function UsersPage() {
       setFilteredUsers(users.filter(user =>
         user.user_code.toLowerCase().includes(term) ||
         user.user_type.toLowerCase().includes(term) ||
-        (user.branch_code && user.branch_code.toLowerCase().includes(term))
+        (user.branch_code && user.branch_code.toLowerCase().includes(term)) ||
+        (user.email && user.email.toLowerCase().includes(term))
       ));
     }
   }, [searchTerm, users]);
@@ -86,6 +91,30 @@ export default function UsersPage() {
       loadUsers();
     } else {
       toast.error(result.error);
+    }
+  };
+
+  const handleEditEmail = (user: User) => {
+    setEmailEditTarget(user);
+    setEditEmail(user.email || '');
+  };
+
+  const handleSaveEmail = async () => {
+    if (!emailEditTarget) return;
+
+    setIsSavingEmail(true);
+    try {
+      const result = await updateUserEmail(emailEditTarget.user_code, editEmail);
+      if (result.success) {
+        toast.success(`${emailEditTarget.user_code}의 이메일이 저장되었습니다.`);
+        setEmailEditTarget(null);
+        setEditEmail('');
+        loadUsers();
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setIsSavingEmail(false);
     }
   };
 
@@ -113,7 +142,7 @@ export default function UsersPage() {
         <CardHeader>
           <CardTitle>등록된 사용자</CardTitle>
           <CardDescription>
-            비밀번호 초기화 및 사용자 상태를 관리합니다.
+            비밀번호 초기화, 이메일 설정 및 사용자 상태를 관리합니다.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -140,6 +169,7 @@ export default function UsersPage() {
                   <TableHead>사용자 ID</TableHead>
                   <TableHead>유형</TableHead>
                   <TableHead>법인코드</TableHead>
+                  <TableHead>이메일</TableHead>
                   <TableHead>비밀번호 상태</TableHead>
                   <TableHead>계정 상태</TableHead>
                   <TableHead>마지막 로그인</TableHead>
@@ -149,7 +179,7 @@ export default function UsersPage() {
               <TableBody>
                 {filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       {isLoading ? '로딩 중...' : '등록된 사용자가 없습니다.'}
                     </TableCell>
                   </TableRow>
@@ -159,6 +189,23 @@ export default function UsersPage() {
                       <TableCell className="font-medium">{user.user_code}</TableCell>
                       <TableCell>{getUserTypeBadge(user.user_type)}</TableCell>
                       <TableCell>{user.branch_code || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {user.email ? (
+                            <span className="text-sm">{user.email}</span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">미등록</span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleEditEmail(user)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {user.is_default_password ? (
                           <Badge variant="outline" className="border-yellow-500 text-yellow-600">
@@ -221,6 +268,42 @@ export default function UsersPage() {
             </Button>
             <Button onClick={handleResetPassword} className="bg-orange-600 hover:bg-orange-700">
               초기화
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 이메일 수정 모달 */}
+      <Dialog open={!!emailEditTarget} onOpenChange={() => setEmailEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              이메일 설정
+            </DialogTitle>
+            <DialogDescription>
+              <strong>{emailEditTarget?.user_code}</strong>의 이메일을 설정합니다.
+              <br />
+              이메일을 등록하면 현황 리포트를 받을 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="email">이메일 주소</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="example@cuckoo.co.kr"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailEditTarget(null)}>
+              취소
+            </Button>
+            <Button onClick={handleSaveEmail} disabled={isSavingEmail}>
+              {isSavingEmail ? '저장 중...' : '저장'}
             </Button>
           </DialogFooter>
         </DialogContent>

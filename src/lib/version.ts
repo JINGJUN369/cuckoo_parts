@@ -1,2 +1,2 @@
 // 앱 버전 정보
-export const APP_VERSION = '0.06';
+export const APP_VERSION = '0.07';
