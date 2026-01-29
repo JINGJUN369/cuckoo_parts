@@ -612,23 +612,254 @@ export default function BranchDashboardPage() {
         isBulk={true}
       />
 
+      {/* 인쇄용 전용 영역 */}
+      <div className="hidden print:block print-area">
+        <div className="print-header">
+          <h1>부품 회수 목록</h1>
+          <div className="print-meta">
+            <span>법인코드: {session?.branchCode}</span>
+            <span>검색기간: {appliedDateFrom} ~ {appliedDateTo}</span>
+            <span>출력일시: {new Date().toLocaleString('ko-KR')}</span>
+          </div>
+          <div className="print-summary">
+            <span>회수대기: {searchStats.waiting}건</span>
+            <span>회수완료: {searchStats.collected}건</span>
+            <span>발송완료: {searchStats.shipped}건</span>
+          </div>
+        </div>
+
+        {/* 회수대기 목록 - 기사별 */}
+        {waitingByTechnician.length > 0 && (
+          <div className="print-section">
+            <h2>■ 회수대기 목록</h2>
+            {waitingByTechnician.map(([techCode, items]) => (
+              <div key={techCode} className="print-group">
+                <h3>기사코드: {techCode} ({items.length}건)</h3>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '15%' }}>요청번호</th>
+                      <th style={{ width: '15%' }}>처리시간</th>
+                      <th style={{ width: '15%' }}>모델명</th>
+                      <th style={{ width: '15%' }}>자재코드</th>
+                      <th style={{ width: '30%' }}>자재명</th>
+                      <th style={{ width: '10%' }}>수량</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item) => (
+                      <tr key={item.id}>
+                        <td>{item.request_number}</td>
+                        <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                        <td>{item.model_name}</td>
+                        <td>{item.material_code}</td>
+                        <td>{item.material_name}</td>
+                        <td>{item.output_quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 회수완료 목록 */}
+        {collectedData.length > 0 && (
+          <div className="print-section">
+            <h2>■ 회수완료 목록 (발송대기)</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>요청번호</th>
+                  <th>처리시간</th>
+                  <th>기사코드</th>
+                  <th>자재코드</th>
+                  <th>자재명</th>
+                  <th>수량</th>
+                  <th>회수일시</th>
+                  <th>경과일</th>
+                </tr>
+              </thead>
+              <tbody>
+                {collectedData.map((item) => {
+                  const daysPassed = item.collected_at
+                    ? Math.floor((new Date().getTime() - new Date(item.collected_at).getTime()) / (1000 * 60 * 60 * 24))
+                    : 0;
+                  return (
+                    <tr key={item.id}>
+                      <td>{item.request_number}</td>
+                      <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                      <td>{item.technician_code || '-'}</td>
+                      <td>{item.material_code}</td>
+                      <td>{item.material_name}</td>
+                      <td>{item.output_quantity}</td>
+                      <td>{item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                      <td>D+{daysPassed}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 발송완료 목록 */}
+        {shippedData.length > 0 && (
+          <div className="print-section">
+            <h2>■ 발송완료 목록</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>요청번호</th>
+                  <th>처리시간</th>
+                  <th>기사코드</th>
+                  <th>자재코드</th>
+                  <th>자재명</th>
+                  <th>운송회사</th>
+                  <th>송장번호</th>
+                  <th>발송일시</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shippedData.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.request_number}</td>
+                    <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                    <td>{item.technician_code || '-'}</td>
+                    <td>{item.material_code}</td>
+                    <td>{item.material_name}</td>
+                    <td>{item.carrier}</td>
+                    <td>{item.tracking_number}</td>
+                    <td>{item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* 인쇄용 스타일 */}
       <style jsx global>{`
         @media print {
+          /* 기본 페이지 숨김 */
           body * {
             visibility: hidden;
           }
-          .space-y-6, .space-y-6 * {
+
+          /* 인쇄 영역만 표시 */
+          .print-area, .print-area * {
             visibility: visible;
           }
-          .space-y-6 {
+
+          .print-area {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
+            padding: 10mm;
+            font-size: 10pt;
           }
-          .print\\:hidden {
-            display: none !important;
+
+          /* 인쇄용 헤더 */
+          .print-header {
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #333;
+          }
+
+          .print-header h1 {
+            font-size: 18pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+          }
+
+          .print-meta {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            font-size: 9pt;
+            color: #555;
+            margin-bottom: 8px;
+          }
+
+          .print-summary {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            font-size: 10pt;
+            font-weight: 500;
+          }
+
+          /* 섹션 */
+          .print-section {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+          }
+
+          .print-section h2 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid #999;
+          }
+
+          /* 기사별 그룹 */
+          .print-group {
+            margin-bottom: 15px;
+            page-break-inside: avoid;
+          }
+
+          .print-group h3 {
+            font-size: 10pt;
+            font-weight: bold;
+            background: #f0f0f0;
+            padding: 5px 8px;
+            margin-bottom: 5px;
+          }
+
+          /* 테이블 스타일 */
+          .print-area table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+          }
+
+          .print-area th,
+          .print-area td {
+            border: 1px solid #333;
+            padding: 4px 6px;
+            text-align: left;
+          }
+
+          .print-area th {
+            background: #e0e0e0;
+            font-weight: bold;
+            text-align: center;
+          }
+
+          .print-area td {
+            word-break: break-all;
+          }
+
+          /* 페이지 나눔 */
+          .print-section {
+            break-inside: avoid;
+          }
+
+          @page {
+            size: A4 landscape;
+            margin: 10mm;
+          }
+        }
+
+        /* 화면에서는 인쇄 영역 숨김 */
+        @media screen {
+          .print-area {
+            display: none;
           }
         }
       `}</style>
