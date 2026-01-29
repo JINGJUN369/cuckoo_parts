@@ -229,6 +229,55 @@ export default function AdminCSDashboardPage() {
       .sort((a, b) => b.total - a.total);
   }, [mainFilteredData]);
 
+  // 품목별 현황 (자재코드 기준)
+  const materialStats = useMemo(() => {
+    const materialMap: Record<string, {
+      material_code: string;
+      material_name: string;
+      waiting: number;
+      collected: number;
+      shipped: number;
+      received: number;
+    }> = {};
+
+    mainFilteredData.forEach((item) => {
+      const code = item.material_code;
+      if (!materialMap[code]) {
+        materialMap[code] = {
+          material_code: code,
+          material_name: item.material_name || '',
+          waiting: 0,
+          collected: 0,
+          shipped: 0,
+          received: 0,
+        };
+      }
+
+      switch (item.status) {
+        case '회수대기':
+          materialMap[code].waiting++;
+          break;
+        case '회수완료':
+          materialMap[code].collected++;
+          break;
+        case '발송':
+          materialMap[code].shipped++;
+          break;
+        case '입고완료':
+          materialMap[code].received++;
+          break;
+      }
+    });
+
+    return Object.values(materialMap)
+      .map((item) => ({
+        ...item,
+        total: item.waiting + item.collected + item.shipped + item.received,
+        pending: item.waiting + item.collected + item.shipped, // 입고 전 건수
+      }))
+      .sort((a, b) => b.pending - a.pending || b.total - a.total);
+  }, [mainFilteredData]);
+
   // 메인 날짜 프리셋 선택
   const handleMainPresetSelect = (preset: DatePreset) => {
     const range = getDateRange(preset);
@@ -1026,81 +1075,91 @@ export default function AdminCSDashboardPage() {
         </Card>
       </div>
 
-      {/* 법인별 현황 히트맵 */}
-      {branchStats.length > 0 && (
+      {/* 품목별 회수 현황 */}
+      {materialStats.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">법인별 현황 히트맵</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              품목별 회수 현황
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <div className="inline-grid gap-1" style={{ gridTemplateColumns: 'auto repeat(4, 80px)' }}>
-                {/* 헤더 */}
-                <div className="p-2 font-medium text-center bg-gray-100 rounded">법인</div>
-                <div className="p-2 font-medium text-center bg-red-100 text-red-700 rounded">회수대기</div>
-                <div className="p-2 font-medium text-center bg-amber-100 text-amber-700 rounded">회수완료</div>
-                <div className="p-2 font-medium text-center bg-blue-100 text-blue-700 rounded">발송</div>
-                <div className="p-2 font-medium text-center bg-green-100 text-green-700 rounded">입고완료</div>
-
-                {/* 데이터 행 */}
-                {branchStats.slice(0, 15).map((branch) => {
-                  const maxVal = Math.max(branch.waiting, branch.collected, branch.shipped, branch.received, 1);
-                  const getOpacity = (val: number) => Math.max(0.2, val / maxVal);
-
-                  return (
-                    <React.Fragment key={branch.branch}>
-                      <div
-                        className="p-2 font-medium text-center bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSelectBranch(branch.branch)}
-                      >
-                        {branch.branch}
-                      </div>
-                      <div
-                        className="p-2 text-center rounded font-medium"
-                        style={{
-                          backgroundColor: `rgba(239, 68, 68, ${getOpacity(branch.waiting)})`,
-                          color: branch.waiting > maxVal * 0.5 ? 'white' : '#b91c1c'
-                        }}
-                      >
-                        {branch.waiting}
-                      </div>
-                      <div
-                        className="p-2 text-center rounded font-medium"
-                        style={{
-                          backgroundColor: `rgba(245, 158, 11, ${getOpacity(branch.collected)})`,
-                          color: branch.collected > maxVal * 0.5 ? 'white' : '#b45309'
-                        }}
-                      >
-                        {branch.collected}
-                      </div>
-                      <div
-                        className="p-2 text-center rounded font-medium"
-                        style={{
-                          backgroundColor: `rgba(59, 130, 246, ${getOpacity(branch.shipped)})`,
-                          color: branch.shipped > maxVal * 0.5 ? 'white' : '#1d4ed8'
-                        }}
-                      >
-                        {branch.shipped}
-                      </div>
-                      <div
-                        className="p-2 text-center rounded font-medium"
-                        style={{
-                          backgroundColor: `rgba(34, 197, 94, ${getOpacity(branch.received)})`,
-                          color: branch.received > maxVal * 0.5 ? 'white' : '#15803d'
-                        }}
-                      >
-                        {branch.received}
-                      </div>
-                    </React.Fragment>
-                  );
-                })}
+            <div className="space-y-3">
+              {/* 요약 정보 */}
+              <div className="flex gap-4 p-3 bg-gray-50 rounded-lg text-sm">
+                <span>총 품목: <strong>{materialStats.length}종</strong></span>
+                <span>입고 대기: <strong className="text-red-600">{materialStats.reduce((sum, m) => sum + m.pending, 0)}건</strong></span>
+                <span>입고 완료: <strong className="text-green-600">{materialStats.reduce((sum, m) => sum + m.received, 0)}건</strong></span>
               </div>
+
+              {/* 품목 목록 */}
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[120px]">자재코드</TableHead>
+                      <TableHead>자재명</TableHead>
+                      <TableHead className="text-center w-[80px]">회수대기</TableHead>
+                      <TableHead className="text-center w-[80px]">회수완료</TableHead>
+                      <TableHead className="text-center w-[80px]">발송</TableHead>
+                      <TableHead className="text-center w-[80px]">입고완료</TableHead>
+                      <TableHead className="text-center w-[100px]">진행률</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {materialStats.slice(0, 20).map((material) => {
+                      const progressRate = material.total > 0
+                        ? Math.round((material.received / material.total) * 100)
+                        : 0;
+
+                      return (
+                        <TableRow key={material.material_code}>
+                          <TableCell className="font-mono text-sm">{material.material_code}</TableCell>
+                          <TableCell className="max-w-[200px] truncate text-sm">{material.material_name}</TableCell>
+                          <TableCell className="text-center">
+                            {material.waiting > 0 ? (
+                              <Badge variant="outline" className="bg-red-50 text-red-700">{material.waiting}</Badge>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {material.collected > 0 ? (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700">{material.collected}</Badge>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {material.shipped > 0 ? (
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700">{material.shipped}</Badge>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {material.received > 0 ? (
+                              <Badge variant="outline" className="bg-green-50 text-green-700">{material.received}</Badge>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-green-500 transition-all"
+                                  style={{ width: `${progressRate}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-muted-foreground w-10">{progressRate}%</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {materialStats.length > 20 && (
+                <p className="text-sm text-muted-foreground text-center">
+                  상위 20개 품목 표시 (전체 {materialStats.length}종)
+                </p>
+              )}
             </div>
-            {branchStats.length > 15 && (
-              <p className="text-sm text-muted-foreground mt-3 text-center">
-                상위 15개 법인 표시 (전체 {branchStats.length}개)
-              </p>
-            )}
           </CardContent>
         </Card>
       )}
