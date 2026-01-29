@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // DB에서 이메일 설정 가져오기
     const settings = await getEmailSettings();
-    const emailFrom = settings.email_from || 'noreply@cuckoo.co.kr';
+    const emailFrom = settings.email_from || 'onboarding@resend.dev';
     const emailFromName = settings.email_from_name || '쿠쿠 부품회수시스템';
     const dbApiKey = settings.resend_api_key;
 
