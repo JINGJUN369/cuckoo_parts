@@ -11,6 +11,7 @@ import {
   LogOut,
   Package,
   Users,
+  Mail,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/admin-cs/calendar', label: '달력', icon: Calendar },
   { href: '/admin-cs/history', label: '이력 조회', icon: History },
   { href: '/admin-cs/users', label: '사용자 관리', icon: Users },
+  { href: '/admin-cs/settings', label: '이메일 설정', icon: Mail },
 ];
 
 export function AdminCSNav() {
