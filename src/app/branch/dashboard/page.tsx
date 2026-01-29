@@ -31,7 +31,7 @@ import { MaterialUsage, Carrier } from '@/types';
 import { toast } from 'sonner';
 
 // 날짜 프리셋 타입
-type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth';
+type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth' | 'last30days';
 
 // 날짜 프리셋 계산 함수
 function getDateRange(preset: DatePreset): { from: string; to: string } {
@@ -60,6 +60,11 @@ function getDateRange(preset: DatePreset): { from: string; to: string } {
       const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
       return { from: formatDate(lastMonthStart), to: formatDate(lastMonthEnd) };
     }
+    case 'last30days': {
+      const thirtyDaysAgo = new Date(today);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+      return { from: formatDate(thirtyDaysAgo), to: formatDate(today) };
+    }
   }
 }
 
@@ -78,7 +83,7 @@ export default function BranchDashboardPage() {
   const [appliedDateFrom, setAppliedDateFrom] = useState('');
   const [appliedDateTo, setAppliedDateTo] = useState('');
   const [isSearched, setIsSearched] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<DatePreset | null>('today');
+  const [selectedPreset, setSelectedPreset] = useState<DatePreset | null>('last30days');
 
   const { getByBranch, updateStatus, updateStatusBulk, getCarriers } = useMaterialUsage();
   const { session } = useAuth();
@@ -93,11 +98,15 @@ export default function BranchDashboardPage() {
     loadCarriers();
   }, [loadCarriers]);
 
-  // 오늘 날짜 기본값 설정
+  // 기본 날짜 설정 (최근 30일)
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    setSearchDateFrom(today);
-    setSearchDateTo(today);
+    const range = getDateRange('last30days');
+    setSearchDateFrom(range.from);
+    setSearchDateTo(range.to);
+    // 자동 검색 실행
+    setAppliedDateFrom(range.from);
+    setAppliedDateTo(range.to);
+    setIsSearched(true);
   }, []);
 
   // 본인 법인 데이터

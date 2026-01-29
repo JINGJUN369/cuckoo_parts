@@ -62,7 +62,7 @@ const STATUS_COLORS = {
 };
 
 // 날짜 프리셋 타입
-type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth';
+type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth' | 'last30days';
 
 // 날짜 프리셋 계산 함수
 function getDateRange(preset: DatePreset): { from: string; to: string } {
@@ -91,6 +91,11 @@ function getDateRange(preset: DatePreset): { from: string; to: string } {
       const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
       return { from: formatDate(lastMonthStart), to: formatDate(lastMonthEnd) };
     }
+    case 'last30days': {
+      const thirtyDaysAgo = new Date(today);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+      return { from: formatDate(thirtyDaysAgo), to: formatDate(today) };
+    }
   }
 }
 
@@ -107,7 +112,7 @@ export default function AdminCSDashboardPage() {
   const [appliedMainDateFrom, setAppliedMainDateFrom] = useState('');
   const [appliedMainDateTo, setAppliedMainDateTo] = useState('');
   const [isMainSearched, setIsMainSearched] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<DatePreset | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<DatePreset | null>('last30days');
 
   // 법인 상세 날짜 필터
   const [searchDateFrom, setSearchDateFrom] = useState('');
@@ -129,11 +134,15 @@ export default function AdminCSDashboardPage() {
   const [showBranchEmailModal, setShowBranchEmailModal] = useState(false);
   const [isSendingBranchEmail, setIsSendingBranchEmail] = useState(false);
 
-  // 초기 날짜 설정 (오늘)
+  // 초기 날짜 설정 (최근 30일)
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    setMainDateFrom(today);
-    setMainDateTo(today);
+    const range = getDateRange('last30days');
+    setMainDateFrom(range.from);
+    setMainDateTo(range.to);
+    // 자동 검색 실행
+    setAppliedMainDateFrom(range.from);
+    setAppliedMainDateTo(range.to);
+    setIsMainSearched(true);
   }, []);
 
   // 이메일이 등록된 사용자 목록 로드

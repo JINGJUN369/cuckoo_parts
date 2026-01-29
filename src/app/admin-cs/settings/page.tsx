@@ -1,14 +1,28 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Settings, Mail, Save, Eye, EyeOff, TestTube } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Settings, Mail, Save, Eye, EyeOff, TestTube, Database, Trash2, Download, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert';
 import { supabase } from '@/lib/supabase/client';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 interface SystemSetting {
   id: string;
@@ -25,6 +39,15 @@ export default function AdminSettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testEmail, setTestEmail] = useState('');
+
+  // 데이터 관리 상태
+  const [deleteFromDate, setDeleteFromDate] = useState('');
+  const [deleteToDate, setDeleteToDate] = useState('');
+  const [dataToDelete, setDataToDelete] = useState<any[]>([]);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // 설정 로드
   const loadSettings = useCallback(async () => {
@@ -124,6 +147,159 @@ export default function AdminSettingsPage() {
   };
 
   const hasApiKey = settings.resend_api_key && settings.resend_api_key.length > 0;
+
+  // 삭제 대상 데이터 미리보기
+  const handlePreviewDelete = async () => {
+    if (!deleteFromDate || !deleteToDate) {
+      toast.error('삭제할 기간을 선택해주세요.');
+      return;
+    }
+
+    if (deleteFromDate > deleteToDate) {
+      toast.error('시작일이 종료일보다 늦습니다.');
+      return;
+    }
+
+    setIsLoadingPreview(true);
+    try {
+      const { data, error } = await supabase
+        .from('material_usage')
+        .select('*')
+        .gte('created_at', `${deleteFromDate}T00:00:00`)
+        .lte('created_at', `${deleteToDate}T23:59:59`);
+
+      if (error) throw error;
+
+      setDataToDelete(data || []);
+      if (data && data.length > 0) {
+        toast.success(`${data.length}건의 데이터가 검색되었습니다.`);
+      } else {
+        toast.info('해당 기간에 데이터가 없습니다.');
+      }
+    } catch (error) {
+      console.error('Preview error:', error);
+      toast.error('데이터 조회 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  // 데이터 백업 다운로드
+  const handleBackupDownload = () => {
+    if (dataToDelete.length === 0) {
+      toast.error('백업할 데이터가 없습니다. 먼저 조회해주세요.');
+      return;
+    }
+
+    try {
+      // 엑셀 데이터 준비
+      const excelData = dataToDelete.map(item => ({
+        '요청번호': item.request_number || '',
+        '이관처(법인)': item.branch_code || '',
+        '기사코드': item.technician_code || '',
+        '자재코드': item.material_code || '',
+        '자재명': item.material_name || '',
+        '수량': item.quantity || 1,
+        '상태': item.status || '',
+        '처리일시': item.process_time || '',
+        '입고일시': item.receipt_time || '',
+        '회수일시': item.collected_at || '',
+        '발송일시': item.shipped_at || '',
+        '입고완료일시': item.received_at || '',
+        '운송회사': item.carrier_name || '',
+        '송장번호': item.tracking_number || '',
+        '생성일시': item.created_at || '',
+      }));
+
+      // 워크북 생성
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+
+      // 컬럼 너비 설정
+      ws['!cols'] = [
+        { wch: 15 }, // 요청번호
+        { wch: 12 }, // 이관처
+        { wch: 12 }, // 기사코드
+        { wch: 15 }, // 자재코드
+        { wch: 30 }, // 자재명
+        { wch: 8 },  // 수량
+        { wch: 10 }, // 상태
+        { wch: 20 }, // 처리일시
+        { wch: 20 }, // 입고일시
+        { wch: 20 }, // 회수일시
+        { wch: 20 }, // 발송일시
+        { wch: 20 }, // 입고완료일시
+        { wch: 15 }, // 운송회사
+        { wch: 20 }, // 송장번호
+        { wch: 20 }, // 생성일시
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, '백업데이터');
+
+      // 파일명 생성
+      const fileName = `부품회수_백업_${deleteFromDate}_${deleteToDate}_${dataToDelete.length}건.xlsx`;
+
+      // 다운로드
+      XLSX.writeFile(wb, fileName);
+      toast.success('백업 파일이 다운로드되었습니다.');
+    } catch (error) {
+      console.error('Backup error:', error);
+      toast.error('백업 파일 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 데이터 삭제 실행
+  const handleDeleteData = async () => {
+    if (deleteConfirmText !== '삭제확인') {
+      toast.error('"삭제확인"을 정확히 입력해주세요.');
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('material_usage')
+        .delete()
+        .gte('created_at', `${deleteFromDate}T00:00:00`)
+        .lte('created_at', `${deleteToDate}T23:59:59`);
+
+      if (error) throw error;
+
+      toast.success(`${dataToDelete.length}건의 데이터가 삭제되었습니다.`);
+      setShowDeleteConfirm(false);
+      setDataToDelete([]);
+      setDeleteConfirmText('');
+      setDeleteFromDate('');
+      setDeleteToDate('');
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('데이터 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 상태별 통계
+  const deleteStats = useMemo(() => {
+    const stats = {
+      waiting: 0,
+      collected: 0,
+      shipped: 0,
+      received: 0,
+      total: dataToDelete.length,
+    };
+
+    dataToDelete.forEach(item => {
+      switch (item.status) {
+        case '회수대기': stats.waiting++; break;
+        case '회수완료': stats.collected++; break;
+        case '발송': stats.shipped++; break;
+        case '입고완료': stats.received++; break;
+      }
+    });
+
+    return stats;
+  }, [dataToDelete]);
 
   if (isLoading) {
     return (
@@ -276,6 +452,169 @@ export default function AdminSettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* 데이터 관리 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            데이터 관리
+          </CardTitle>
+          <CardDescription>
+            업로드된 데이터를 기간별로 백업하거나 삭제하여 용량을 관리합니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* 경고 메시지 */}
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>주의</AlertTitle>
+            <AlertDescription>
+              데이터 삭제는 복구할 수 없습니다. 삭제 전 반드시 백업을 다운로드해주세요.
+            </AlertDescription>
+          </Alert>
+
+          {/* 기간 선택 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="deleteFromDate">시작일</Label>
+              <Input
+                id="deleteFromDate"
+                type="date"
+                value={deleteFromDate}
+                onChange={(e) => {
+                  setDeleteFromDate(e.target.value);
+                  setDataToDelete([]);
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deleteToDate">종료일</Label>
+              <Input
+                id="deleteToDate"
+                type="date"
+                value={deleteToDate}
+                onChange={(e) => {
+                  setDeleteToDate(e.target.value);
+                  setDataToDelete([]);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* 조회 버튼 */}
+          <Button
+            onClick={handlePreviewDelete}
+            disabled={isLoadingPreview || !deleteFromDate || !deleteToDate}
+            variant="outline"
+            className="w-full"
+          >
+            {isLoadingPreview ? '조회 중...' : '데이터 조회'}
+          </Button>
+
+          {/* 조회 결과 */}
+          {dataToDelete.length > 0 && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-gray-50 border">
+                <h4 className="font-medium mb-3">조회 결과: {dataToDelete.length}건</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div className="p-2 rounded bg-red-50 border border-red-200">
+                    <div className="text-red-600 font-medium">회수대기</div>
+                    <div className="text-lg font-bold">{deleteStats.waiting}건</div>
+                  </div>
+                  <div className="p-2 rounded bg-amber-50 border border-amber-200">
+                    <div className="text-amber-600 font-medium">회수완료</div>
+                    <div className="text-lg font-bold">{deleteStats.collected}건</div>
+                  </div>
+                  <div className="p-2 rounded bg-blue-50 border border-blue-200">
+                    <div className="text-blue-600 font-medium">발송</div>
+                    <div className="text-lg font-bold">{deleteStats.shipped}건</div>
+                  </div>
+                  <div className="p-2 rounded bg-green-50 border border-green-200">
+                    <div className="text-green-600 font-medium">입고완료</div>
+                    <div className="text-lg font-bold">{deleteStats.received}건</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 액션 버튼 */}
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleBackupDownload}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  백업 다운로드
+                </Button>
+                <Button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  variant="destructive"
+                  className="flex-1"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  데이터 삭제
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 삭제 확인 모달 */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              데이터 삭제 확인
+            </DialogTitle>
+            <DialogDescription>
+              이 작업은 되돌릴 수 없습니다. 정말 삭제하시겠습니까?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-red-50 border border-red-200">
+              <p className="text-sm text-red-700">
+                <strong>{deleteFromDate}</strong> ~ <strong>{deleteToDate}</strong> 기간의<br />
+                총 <strong>{dataToDelete.length}건</strong>의 데이터가 영구적으로 삭제됩니다.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmText">
+                삭제하려면 <strong className="text-red-600">"삭제확인"</strong>을 입력하세요
+              </Label>
+              <Input
+                id="confirmText"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="삭제확인"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteConfirm(false);
+                setDeleteConfirmText('');
+              }}
+            >
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteData}
+              disabled={isDeleting || deleteConfirmText !== '삭제확인'}
+            >
+              {isDeleting ? '삭제 중...' : '삭제 실행'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
