@@ -108,9 +108,12 @@ export interface UploadHistory {
   id: string;
   file_name: string;
   total_rows: number;
-  new_rows: number;
+  new_rows: number;           // 호환성 유지
+  saved_rows?: number;        // 저장된 건수 (회수대상)
+  discarded_rows?: number;    // 폐기된 건수 (비회수대상)
   duplicate_rows: number;
   recovery_target_rows: number;
+  by_date_detail?: Record<string, { saved: number; discarded: number }>; // 날짜별 상세
   uploaded_by?: string;
   uploaded_at: string;
 }

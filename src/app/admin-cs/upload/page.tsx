@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,12 +20,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { parseExcelFile } from '@/lib/excel';
-import { useMaterialUsage } from '@/hooks/useMaterialUsage';
+import { useMaterialUsage, UploadResult } from '@/hooks/useMaterialUsage';
 import { useRecoveryMaterials } from '@/hooks/useRecoveryMaterials';
 import { useAuth } from '@/hooks/useAuth';
 import { ParsedExcelRow } from '@/types';
-import { STORAGE_KEYS } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
 export default function UploadPage() {
@@ -36,14 +37,10 @@ export default function UploadPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [uploadResult, setUploadResult] = useState<{
-    new: number;
-    duplicate: number;
-    recoveryTarget: number;
-  } | null>(null);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
 
   const { addData } = useMaterialUsage();
-  const { getMaterialCodes } = useRecoveryMaterials();
+  const { getMaterialCodes, getActiveMaterials } = useRecoveryMaterials();
   const { session } = useAuth();
 
   // 파일 선택 핸들러
@@ -57,7 +54,6 @@ export default function UploadPage() {
     setUploadStatus('파일을 읽는 중...');
 
     try {
-      // 약간의 지연을 주어 UI 업데이트
       await new Promise(resolve => setTimeout(resolve, 100));
 
       setUploadStatus('데이터를 파싱하는 중...');
@@ -109,9 +105,16 @@ export default function UploadPage() {
     }
   }, []);
 
-  // 업로드 실행 (비동기 처리)
+  // 업로드 실행
   const handleUpload = useCallback(async (overwrite: boolean = false) => {
     if (parsedData.length === 0) return;
+
+    // 회수대상 자재가 설정되어 있는지 확인
+    const materialCodes = getMaterialCodes();
+    if (materialCodes.size === 0) {
+      toast.error('먼저 회수대상 자재를 설정해주세요. (자재 설정 메뉴)');
+      return;
+    }
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -119,47 +122,47 @@ export default function UploadPage() {
     setShowDuplicateModal(false);
 
     try {
-      // UI 업데이트를 위한 지연
       await new Promise(resolve => setTimeout(resolve, 100));
 
       setUploadStatus('회수대상 자재 확인 중...');
       setUploadProgress(10);
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      const materialCodes = getMaterialCodes();
-
-      setUploadStatus('데이터 처리 중...');
+      setUploadStatus('데이터 필터링 및 저장 중...');
       setUploadProgress(30);
-      await new Promise(resolve => setTimeout(resolve, 50));
 
-      // 실제 데이터 추가
-      const result = addData(parsedData, materialCodes, overwrite);
+      // 실제 데이터 추가 (회수대상만 저장)
+      const result = await addData(parsedData, materialCodes, overwrite);
 
       setUploadProgress(80);
       setUploadStatus('이력 저장 중...');
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      // 업로드 이력 저장
-      const historyKey = STORAGE_KEYS.UPLOAD_HISTORY;
-      const existing = localStorage.getItem(historyKey);
-      const history = existing ? JSON.parse(existing) : [];
-      history.unshift({
-        id: crypto.randomUUID(),
+      // 업로드 이력 Supabase에 저장
+      const { error: historyError } = await supabase.from('upload_history').insert({
         file_name: file?.name,
-        total_rows: parsedData.length,
-        new_rows: result.new,
+        total_rows: result.total,
+        saved_rows: result.saved,
+        new_rows: result.saved, // 호환성을 위해 유지
         duplicate_rows: result.duplicate,
-        recovery_target_rows: result.recoveryTarget,
+        discarded_rows: result.discarded,
+        recovery_target_rows: result.saved,
+        by_date_detail: result.byDate,
         uploaded_by: session?.userCode,
         uploaded_at: new Date().toISOString(),
       });
-      localStorage.setItem(historyKey, JSON.stringify(history.slice(0, 500)));
+
+      if (historyError) {
+        console.error('History save error:', historyError);
+      }
 
       setUploadProgress(100);
       setUploadStatus('완료!');
       setUploadResult(result);
 
-      toast.success(`업로드 완료: 신규 ${result.new.toLocaleString()}건, 중복 ${result.duplicate.toLocaleString()}건`);
+      toast.success(
+        `업로드 완료: 저장 ${result.saved.toLocaleString()}건, 폐기 ${result.discarded.toLocaleString()}건`
+      );
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('업로드 중 오류가 발생했습니다.');
@@ -174,44 +177,16 @@ export default function UploadPage() {
   const handleUploadClick = useCallback(async () => {
     if (parsedData.length === 0 || isUploading) return;
 
-    setIsUploading(true);
-    setUploadStatus('중복 데이터 확인 중...');
-    setUploadProgress(5);
-
-    try {
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // 중복 체크
-      const storedData = localStorage.getItem(STORAGE_KEYS.MATERIAL_USAGE);
-      const existingData = storedData ? JSON.parse(storedData) : [];
-      const existingKeys = new Set(
-        existingData.map((item: { request_number: string; branch_code: string; material_code: string }) =>
-          `${item.request_number}_${item.branch_code}_${item.material_code}`
-        )
-      );
-
-      const duplicateCount = parsedData.filter((row) =>
-        existingKeys.has(`${row.request_number}_${row.branch_code}_${row.material_code}`)
-      ).length;
-
-      setIsUploading(false);
-      setUploadStatus('');
-      setUploadProgress(0);
-
-      if (duplicateCount > 0) {
-        setShowDuplicateModal(true);
-      } else {
-        handleUpload(false);
-      }
-    } catch (error) {
-      console.error('Check error:', error);
-      setIsUploading(false);
-      setUploadStatus('');
-      setUploadProgress(0);
-      // 에러가 발생해도 업로드 시도
-      handleUpload(false);
+    // 회수대상 자재 설정 확인
+    const activeMaterials = getActiveMaterials();
+    if (activeMaterials.length === 0) {
+      toast.error('먼저 회수대상 자재를 설정해주세요.');
+      return;
     }
-  }, [parsedData, isUploading, handleUpload]);
+
+    // 바로 업로드 실행 (중복 체크는 서버에서 처리)
+    handleUpload(false);
+  }, [parsedData, isUploading, getActiveMaterials, handleUpload]);
 
   // 초기화
   const handleReset = useCallback(() => {
@@ -222,6 +197,9 @@ export default function UploadPage() {
     setUploadStatus('');
   }, []);
 
+  // 회수대상 자재 수
+  const activeMaterialCount = getActiveMaterials().length;
+
   return (
     <div className="space-y-6">
       {/* 헤더 */}
@@ -229,6 +207,21 @@ export default function UploadPage() {
         <h1 className="text-2xl font-bold">엑셀 업로드</h1>
         <p className="text-muted-foreground">자재사용 데이터를 업로드합니다.</p>
       </div>
+
+      {/* 회수대상 자재 안내 */}
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertTitle>회수대상 자재 필터링</AlertTitle>
+        <AlertDescription>
+          현재 {activeMaterialCount}개의 회수대상 자재가 설정되어 있습니다.
+          업로드 시 회수대상 자재만 저장되고, 나머지는 폐기됩니다.
+          {activeMaterialCount === 0 && (
+            <span className="text-red-600 font-medium">
+              {' '}먼저 자재 설정 메뉴에서 회수대상 자재를 등록해주세요.
+            </span>
+          )}
+        </AlertDescription>
+      </Alert>
 
       {/* 업로드 영역 */}
       <Card>
@@ -303,7 +296,10 @@ export default function UploadPage() {
           {/* 액션 버튼 */}
           {parsedData.length > 0 && !isUploading && (
             <div className="flex gap-2 mt-4">
-              <Button onClick={handleUploadClick} disabled={isLoading || isUploading}>
+              <Button
+                onClick={handleUploadClick}
+                disabled={isLoading || isUploading || activeMaterialCount === 0}
+              >
                 {isUploading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -321,15 +317,46 @@ export default function UploadPage() {
 
           {/* 업로드 결과 */}
           {uploadResult && !isUploading && (
-            <div className="mt-4 p-4 bg-green-50 rounded-lg flex items-start gap-3">
-              <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-              <div>
-                <p className="font-medium text-green-800">업로드 완료</p>
-                <ul className="text-sm text-green-700 mt-1">
-                  <li>신규 등록: {uploadResult.new.toLocaleString()}건</li>
-                  <li>중복 건수: {uploadResult.duplicate.toLocaleString()}건</li>
-                  <li>회수대상: {uploadResult.recoveryTarget.toLocaleString()}건</li>
-                </ul>
+            <div className="mt-4 p-4 bg-green-50 rounded-lg">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-green-800">업로드 완료</p>
+                  <ul className="text-sm text-green-700 mt-1 space-y-1">
+                    <li>전체 행: {uploadResult.total.toLocaleString()}건</li>
+                    <li className="text-green-800 font-medium">
+                      저장 (회수대상): {uploadResult.saved.toLocaleString()}건
+                    </li>
+                    <li className="text-orange-600">
+                      폐기 (비회수대상): {uploadResult.discarded.toLocaleString()}건
+                    </li>
+                    <li>중복 건수: {uploadResult.duplicate.toLocaleString()}건</li>
+                  </ul>
+
+                  {/* 날짜별 상세 */}
+                  {Object.keys(uploadResult.byDate).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-green-200">
+                      <p className="text-sm font-medium text-green-800 mb-2">처리날짜별 현황:</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                        {Object.entries(uploadResult.byDate)
+                          .sort(([a], [b]) => b.localeCompare(a))
+                          .slice(0, 6)
+                          .map(([date, stats]) => (
+                            <div key={date} className="bg-white/50 rounded px-2 py-1">
+                              <span className="text-gray-600">{date}:</span>
+                              <span className="text-green-700 ml-1">저장 {stats.saved}</span>
+                              <span className="text-orange-600 ml-1">폐기 {stats.discarded}</span>
+                            </div>
+                          ))}
+                      </div>
+                      {Object.keys(uploadResult.byDate).length > 6 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          ...외 {Object.keys(uploadResult.byDate).length - 6}개 날짜
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -352,6 +379,7 @@ export default function UploadPage() {
                   <TableRow>
                     <TableHead>요청번호</TableHead>
                     <TableHead>이관처</TableHead>
+                    <TableHead>처리시간</TableHead>
                     <TableHead>모델명</TableHead>
                     <TableHead>자재코드</TableHead>
                     <TableHead>품명 및 규격</TableHead>
@@ -359,16 +387,32 @@ export default function UploadPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {parsedData.slice(0, 50).map((row, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{row.request_number}</TableCell>
-                      <TableCell>{row.branch_code}</TableCell>
-                      <TableCell>{row.model_name}</TableCell>
-                      <TableCell>{row.material_code}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{row.material_name}</TableCell>
-                      <TableCell>{row.output_quantity}</TableCell>
-                    </TableRow>
-                  ))}
+                  {parsedData.slice(0, 50).map((row, index) => {
+                    const isRecoveryTarget = getMaterialCodes().has(row.material_code);
+                    return (
+                      <TableRow
+                        key={index}
+                        className={isRecoveryTarget ? '' : 'bg-orange-50 text-orange-700'}
+                      >
+                        <TableCell className="font-medium">{row.request_number}</TableCell>
+                        <TableCell>{row.branch_code}</TableCell>
+                        <TableCell>
+                          {row.process_time
+                            ? new Date(row.process_time).toLocaleDateString('ko-KR')
+                            : '-'}
+                        </TableCell>
+                        <TableCell>{row.model_name}</TableCell>
+                        <TableCell>
+                          {row.material_code}
+                          {!isRecoveryTarget && (
+                            <span className="ml-1 text-xs text-orange-500">(폐기)</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-[200px] truncate">{row.material_name}</TableCell>
+                        <TableCell>{row.output_quantity}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -377,6 +421,9 @@ export default function UploadPage() {
                 ...외 {(parsedData.length - 50).toLocaleString()}개 행
               </p>
             )}
+            <p className="text-xs text-orange-600 mt-2">
+              * 주황색 행은 회수대상이 아니므로 업로드 시 폐기됩니다.
+            </p>
           </CardContent>
         </Card>
       )}

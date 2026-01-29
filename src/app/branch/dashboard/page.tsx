@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Package, Clock, TruckIcon, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,16 +19,27 @@ import { ShippingModal } from '@/components/modals/ShippingModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
 import { useAuth } from '@/hooks/useAuth';
-import { MaterialUsage, RecoveryStatus } from '@/types';
+import { MaterialUsage, Carrier } from '@/types';
 import { toast } from 'sonner';
 
 export default function BranchDashboardPage() {
   const [selectedItem, setSelectedItem] = useState<MaterialUsage | null>(null);
   const [showCollectModal, setShowCollectModal] = useState(false);
   const [showShippingModal, setShowShippingModal] = useState(false);
+  const [carriers, setCarriers] = useState<Carrier[]>([]);
 
   const { getByBranch, updateStatus, getCarriers } = useMaterialUsage();
   const { session } = useAuth();
+
+  // 운송회사 목록 로드
+  const loadCarriers = useCallback(async () => {
+    const carrierList = await getCarriers();
+    setCarriers(carrierList);
+  }, [getCarriers]);
+
+  useEffect(() => {
+    loadCarriers();
+  }, [loadCarriers]);
 
   // 본인 법인 데이터
   const branchData = useMemo(() => {
@@ -41,25 +52,30 @@ export default function BranchDashboardPage() {
   const collectedData = useMemo(() => branchData.filter((item) => item.status === '회수완료'), [branchData]);
   const shippedData = useMemo(() => branchData.filter((item) => item.status === '발송'), [branchData]);
 
-  // 운송회사 목록
-  const carriers = useMemo(() => getCarriers(), [getCarriers]);
-
   // 회수완료 처리
-  const handleCollect = () => {
+  const handleCollect = async () => {
     if (!selectedItem || !session) return;
 
-    updateStatus(selectedItem.id, '회수완료', session.userCode);
-    toast.success('회수완료 처리되었습니다.');
+    try {
+      await updateStatus(selectedItem.id, '회수완료', session.userCode);
+      toast.success('회수완료 처리되었습니다.');
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
     setShowCollectModal(false);
     setSelectedItem(null);
   };
 
   // 발송 처리
-  const handleShip = (carrier: string, trackingNumber: string) => {
+  const handleShip = async (carrier: string, trackingNumber: string) => {
     if (!selectedItem || !session) return;
 
-    updateStatus(selectedItem.id, '발송', session.userCode, { carrier, tracking_number: trackingNumber });
-    toast.success('발송 처리되었습니다.');
+    try {
+      await updateStatus(selectedItem.id, '발송', session.userCode, { carrier, tracking_number: trackingNumber });
+      toast.success('발송 처리되었습니다.');
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
     setShowShippingModal(false);
     setSelectedItem(null);
   };

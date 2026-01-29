@@ -1,172 +1,228 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { MaterialUsage, RecoveryStatus, ParsedExcelRow, RecoveryStats, StatusChangeHistory } from '@/types';
-import { STORAGE_KEYS, DEFAULT_CARRIERS } from '@/lib/supabase/client';
+import { MaterialUsage, RecoveryStatus, ParsedExcelRow, RecoveryStats } from '@/types';
+import { supabase, DEFAULT_CARRIERS } from '@/lib/supabase/client';
 import { generateDuplicateKey } from '@/lib/excel';
+
+export interface UploadResult {
+  total: number;       // 전체 업로드 건수
+  saved: number;       // 저장된 건수 (회수대상)
+  discarded: number;   // 폐기된 건수 (비회수대상)
+  duplicate: number;   // 중복 건수
+  byDate: { [date: string]: { saved: number; discarded: number } }; // 처리날짜별 통계
+}
 
 export function useMaterialUsage() {
   const [data, setData] = useState<MaterialUsage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // 데이터 로드
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEYS.MATERIAL_USAGE);
-    if (stored) {
-      setData(JSON.parse(stored));
+  const loadData = useCallback(async () => {
+    try {
+      const { data: materials, error } = await supabase
+        .from('material_usage')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading data:', error);
+        return;
+      }
+
+      setData(materials || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
-  // 데이터 저장
-  const saveData = useCallback((newData: MaterialUsage[]) => {
-    localStorage.setItem(STORAGE_KEYS.MATERIAL_USAGE, JSON.stringify(newData));
-    setData(newData);
-  }, []);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  // 데이터 추가 (엑셀 업로드용)
+  // 데이터 추가 (엑셀 업로드용) - 회수대상만 저장
   const addData = useCallback(
-    (
+    async (
       rows: ParsedExcelRow[],
       recoveryMaterialCodes: Set<string>,
       overwriteDuplicates: boolean = false
-    ): { new: number; duplicate: number; recoveryTarget: number } => {
-      const existing = [...data];
+    ): Promise<UploadResult> => {
+      const result: UploadResult = {
+        total: rows.length,
+        saved: 0,
+        discarded: 0,
+        duplicate: 0,
+        byDate: {},
+      };
+
+      // 기존 데이터의 키 Set 생성
       const existingKeys = new Set(
-        existing.map((item) =>
+        data.map((item) =>
           `${item.request_number}_${item.branch_code}_${item.material_code}`
         )
       );
 
-      let newCount = 0;
-      let duplicateCount = 0;
-      let recoveryTargetCount = 0;
+      const newItems: Omit<MaterialUsage, 'id'>[] = [];
+      const updateItems: { key: string; data: Partial<MaterialUsage> }[] = [];
 
       for (const row of rows) {
         const key = generateDuplicateKey(row);
         const isRecoveryTarget = recoveryMaterialCodes.has(row.material_code);
 
+        // 처리날짜 추출 (process_time 기준)
+        const processDate = row.process_time
+          ? new Date(row.process_time).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+
+        // 날짜별 통계 초기화
+        if (!result.byDate[processDate]) {
+          result.byDate[processDate] = { saved: 0, discarded: 0 };
+        }
+
+        // 회수대상이 아닌 경우 폐기
+        if (!isRecoveryTarget) {
+          result.discarded++;
+          result.byDate[processDate].discarded++;
+          continue;
+        }
+
+        // 중복 체크
         if (existingKeys.has(key)) {
-          duplicateCount++;
+          result.duplicate++;
           if (overwriteDuplicates) {
-            // 덮어쓰기: 기존 항목 업데이트
-            const index = existing.findIndex(
-              (item) =>
-                item.request_number === row.request_number &&
-                item.branch_code === row.branch_code &&
-                item.material_code === row.material_code
-            );
-            if (index !== -1) {
-              existing[index] = {
-                ...existing[index],
+            updateItems.push({
+              key,
+              data: {
                 ...row,
                 parts_cost: row.parts_cost || 0,
                 repair_cost: row.repair_cost || 0,
                 visit_cost: row.visit_cost || 0,
                 output_quantity: row.output_quantity || 0,
-                is_recovery_target: isRecoveryTarget,
+                is_recovery_target: true,
                 updated_at: new Date().toISOString(),
-              };
-            }
+              },
+            });
           }
         } else {
-          // 새 항목 추가
-          const newItem: MaterialUsage = {
-            id: crypto.randomUUID(),
+          // 신규 회수대상 저장
+          newItems.push({
             ...row,
             parts_cost: row.parts_cost || 0,
             repair_cost: row.repair_cost || 0,
             visit_cost: row.visit_cost || 0,
             output_quantity: row.output_quantity || 0,
-            status: isRecoveryTarget ? '회수대기' : '회수대기',
-            is_recovery_target: isRecoveryTarget,
+            status: '회수대기' as RecoveryStatus,
+            is_recovery_target: true,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          };
-          existing.push(newItem);
+          });
           existingKeys.add(key);
-          newCount++;
-          if (isRecoveryTarget) {
-            recoveryTargetCount++;
-          }
+          result.saved++;
+          result.byDate[processDate].saved++;
         }
       }
 
-      saveData(existing);
+      // 배치 삽입 (500개씩)
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < newItems.length; i += BATCH_SIZE) {
+        const batch = newItems.slice(i, i + BATCH_SIZE);
+        const { error } = await supabase.from('material_usage').insert(batch);
+        if (error) {
+          console.error('Insert error:', error);
+          throw error;
+        }
+      }
 
-      return { new: newCount, duplicate: duplicateCount, recoveryTarget: recoveryTargetCount };
+      // 덮어쓰기 업데이트
+      for (const item of updateItems) {
+        const [request_number, branch_code, material_code] = item.key.split('_');
+        const { error } = await supabase
+          .from('material_usage')
+          .update(item.data)
+          .eq('request_number', request_number)
+          .eq('branch_code', branch_code)
+          .eq('material_code', material_code);
+        if (error) {
+          console.error('Update error:', error);
+        }
+      }
+
+      // 데이터 새로고침
+      await loadData();
+
+      return result;
     },
-    [data, saveData]
+    [data, loadData]
   );
 
   // 상태 변경
   const updateStatus = useCallback(
-    (
+    async (
       id: string,
       newStatus: RecoveryStatus,
       userCode: string,
       additionalData?: { carrier?: string; tracking_number?: string }
     ) => {
-      const updated = data.map((item) => {
-        if (item.id === id) {
-          const now = new Date().toISOString();
-          const updatedItem = { ...item, status: newStatus, updated_at: now };
+      const item = data.find((d) => d.id === id);
+      if (!item) return;
 
-          switch (newStatus) {
-            case '회수완료':
-              updatedItem.collected_at = now;
-              updatedItem.collected_by = userCode;
-              break;
-            case '발송':
-              updatedItem.shipped_at = now;
-              updatedItem.shipped_by = userCode;
-              updatedItem.carrier = additionalData?.carrier;
-              updatedItem.tracking_number = additionalData?.tracking_number;
-              break;
-            case '입고완료':
-              updatedItem.received_at = now;
-              updatedItem.received_by = userCode;
-              break;
-          }
+      const now = new Date().toISOString();
+      const updateData: Partial<MaterialUsage> = {
+        status: newStatus,
+        updated_at: now,
+      };
 
-          // 상태 변경 이력 저장
-          saveStatusChangeHistory({
-            id: crypto.randomUUID(),
-            material_usage_id: item.id,
-            request_number: item.request_number,
-            branch_code: item.branch_code,
-            material_code: item.material_code,
-            previous_status: item.status,
-            new_status: newStatus,
-            carrier: additionalData?.carrier,
-            tracking_number: additionalData?.tracking_number,
-            changed_by: userCode,
-            changed_at: now,
-          });
+      switch (newStatus) {
+        case '회수완료':
+          updateData.collected_at = now;
+          updateData.collected_by = userCode;
+          break;
+        case '발송':
+          updateData.shipped_at = now;
+          updateData.shipped_by = userCode;
+          updateData.carrier = additionalData?.carrier;
+          updateData.tracking_number = additionalData?.tracking_number;
+          break;
+        case '입고완료':
+          updateData.received_at = now;
+          updateData.received_by = userCode;
+          break;
+      }
 
-          return updatedItem;
-        }
-        return item;
+      // Supabase 업데이트
+      const { error } = await supabase
+        .from('material_usage')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        console.error('Status update error:', error);
+        throw error;
+      }
+
+      // 상태 변경 이력 저장
+      await supabase.from('status_change_history').insert({
+        material_usage_id: id,
+        request_number: item.request_number,
+        branch_code: item.branch_code,
+        material_code: item.material_code,
+        previous_status: item.status,
+        new_status: newStatus,
+        carrier: additionalData?.carrier,
+        tracking_number: additionalData?.tracking_number,
+        changed_by: userCode,
+        changed_at: now,
       });
 
-      saveData(updated);
+      // 로컬 상태 업데이트
+      setData((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, ...updateData } : d))
+      );
     },
-    [data, saveData]
+    [data]
   );
-
-  // 상태 변경 이력 저장
-  const saveStatusChangeHistory = (history: StatusChangeHistory) => {
-    const historyKey = STORAGE_KEYS.STATUS_CHANGE_HISTORY;
-    const existing = localStorage.getItem(historyKey);
-    const histories = existing ? JSON.parse(existing) : [];
-    histories.unshift(history);
-
-    if (histories.length > 10000) {
-      histories.splice(10000);
-    }
-
-    localStorage.setItem(historyKey, JSON.stringify(histories));
-  };
 
   // 법인별 데이터 필터링
   const getByBranch = useCallback(
@@ -206,14 +262,22 @@ export function useMaterialUsage() {
   }, [data]);
 
   // 운송회사 목록 가져오기
-  const getCarriers = useCallback(() => {
-    const stored = localStorage.getItem(STORAGE_KEYS.CARRIERS);
-    if (stored) {
-      return JSON.parse(stored);
+  const getCarriers = useCallback(async () => {
+    const { data: carriers, error } = await supabase
+      .from('carriers')
+      .select('*')
+      .eq('is_active', true);
+
+    if (error || !carriers || carriers.length === 0) {
+      return DEFAULT_CARRIERS;
     }
-    localStorage.setItem(STORAGE_KEYS.CARRIERS, JSON.stringify(DEFAULT_CARRIERS));
-    return DEFAULT_CARRIERS;
+    return carriers;
   }, []);
+
+  // 데이터 새로고침
+  const refresh = useCallback(() => {
+    loadData();
+  }, [loadData]);
 
   return {
     data,
@@ -225,5 +289,6 @@ export function useMaterialUsage() {
     getRecoveryTargets,
     getStats,
     getCarriers,
+    refresh,
   };
 }
