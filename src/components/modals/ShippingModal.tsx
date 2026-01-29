@@ -27,6 +27,7 @@ interface ShippingModalProps {
   onConfirm: (carrier: string, trackingNumber: string) => void;
   carriers: Carrier[];
   requestNumber: string;
+  isBulk?: boolean;
 }
 
 export function ShippingModal({
@@ -35,6 +36,7 @@ export function ShippingModal({
   onConfirm,
   carriers,
   requestNumber,
+  isBulk = false,
 }: ShippingModalProps) {
   const [carrier, setCarrier] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -59,9 +61,12 @@ export function ShippingModal({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>발송 정보 입력</DialogTitle>
+          <DialogTitle>{isBulk ? '일괄 발송 정보 입력' : '발송 정보 입력'}</DialogTitle>
           <DialogDescription>
-            요청번호 {requestNumber}의 발송 정보를 입력해주세요.
+            {isBulk
+              ? `${requestNumber} - 동일한 운송회사와 송장번호로 발송됩니다.`
+              : `요청번호 ${requestNumber}의 발송 정보를 입력해주세요.`
+            }
           </DialogDescription>
         </DialogHeader>
 

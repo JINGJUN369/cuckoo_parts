@@ -10,6 +10,7 @@ import {
   History,
   LogOut,
   Package,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,6 +23,7 @@ const navItems = [
   { href: '/admin-cs/materials', label: '회수대상 자재설정', icon: Settings },
   { href: '/admin-cs/calendar', label: '달력', icon: Calendar },
   { href: '/admin-cs/history', label: '이력 조회', icon: History },
+  { href: '/admin-cs/users', label: '사용자 관리', icon: Users },
 ];
 
 export function AdminCSNav() {

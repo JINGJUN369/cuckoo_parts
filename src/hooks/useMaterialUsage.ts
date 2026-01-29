@@ -224,6 +224,77 @@ export function useMaterialUsage() {
     [data]
   );
 
+  // 일괄 상태 변경
+  const updateStatusBulk = useCallback(
+    async (
+      ids: string[],
+      newStatus: RecoveryStatus,
+      userCode: string,
+      additionalData?: { carrier?: string; tracking_number?: string }
+    ) => {
+      if (ids.length === 0) return;
+
+      const now = new Date().toISOString();
+      const updateData: Partial<MaterialUsage> = {
+        status: newStatus,
+        updated_at: now,
+      };
+
+      switch (newStatus) {
+        case '회수완료':
+          updateData.collected_at = now;
+          updateData.collected_by = userCode;
+          break;
+        case '발송':
+          updateData.shipped_at = now;
+          updateData.shipped_by = userCode;
+          updateData.carrier = additionalData?.carrier;
+          updateData.tracking_number = additionalData?.tracking_number;
+          break;
+        case '입고완료':
+          updateData.received_at = now;
+          updateData.received_by = userCode;
+          break;
+      }
+
+      // Supabase 일괄 업데이트
+      const { error } = await supabase
+        .from('material_usage')
+        .update(updateData)
+        .in('id', ids);
+
+      if (error) {
+        console.error('Bulk status update error:', error);
+        throw error;
+      }
+
+      // 상태 변경 이력 일괄 저장
+      const historyItems = ids.map(id => {
+        const item = data.find(d => d.id === id);
+        return {
+          material_usage_id: id,
+          request_number: item?.request_number || '',
+          branch_code: item?.branch_code || '',
+          material_code: item?.material_code || '',
+          previous_status: item?.status || '회수대기',
+          new_status: newStatus,
+          carrier: additionalData?.carrier,
+          tracking_number: additionalData?.tracking_number,
+          changed_by: userCode,
+          changed_at: now,
+        };
+      });
+
+      await supabase.from('status_change_history').insert(historyItems);
+
+      // 로컬 상태 업데이트
+      setData((prev) =>
+        prev.map((d) => (ids.includes(d.id) ? { ...d, ...updateData } : d))
+      );
+    },
+    [data]
+  );
+
   // 법인별 데이터 필터링
   const getByBranch = useCallback(
     (branchCode: string): MaterialUsage[] => {
@@ -284,6 +355,7 @@ export function useMaterialUsage() {
     isLoading,
     addData,
     updateStatus,
+    updateStatusBulk,
     getByBranch,
     getByStatus,
     getRecoveryTargets,
