@@ -52,7 +52,7 @@ import {
 } from 'recharts';
 import { MaterialUsage, RecoveryStatus } from '@/types';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client';
 
 const STATUS_COLORS = {
   '회수대기': '#ef4444',
