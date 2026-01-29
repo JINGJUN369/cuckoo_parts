@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,7 +24,7 @@ import { parseExcelFile } from '@/lib/excel';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
 import { useRecoveryMaterials } from '@/hooks/useRecoveryMaterials';
 import { useAuth } from '@/hooks/useAuth';
-import { ParsedExcelRow, DuplicateAction } from '@/types';
+import { ParsedExcelRow } from '@/types';
 import { STORAGE_KEYS } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 
@@ -32,6 +32,9 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<ParsedExcelRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [uploadResult, setUploadResult] = useState<{
     new: number;
@@ -51,14 +54,22 @@ export default function UploadPage() {
     setFile(selectedFile);
     setIsLoading(true);
     setUploadResult(null);
+    setUploadStatus('파일을 읽는 중...');
 
     try {
+      // 약간의 지연을 주어 UI 업데이트
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      setUploadStatus('데이터를 파싱하는 중...');
       const data = await parseExcelFile(selectedFile);
       setParsedData(data);
-      toast.success(`${data.length}개 행을 파싱했습니다.`);
+      setUploadStatus('');
+      toast.success(`${data.length.toLocaleString()}개 행을 파싱했습니다.`);
     } catch (error) {
+      console.error('Parse error:', error);
       toast.error('파일 파싱 중 오류가 발생했습니다.');
       setParsedData([]);
+      setUploadStatus('');
     } finally {
       setIsLoading(false);
     }
@@ -78,78 +89,137 @@ export default function UploadPage() {
     setFile(droppedFile);
     setIsLoading(true);
     setUploadResult(null);
+    setUploadStatus('파일을 읽는 중...');
 
     try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      setUploadStatus('데이터를 파싱하는 중...');
       const data = await parseExcelFile(droppedFile);
       setParsedData(data);
-      toast.success(`${data.length}개 행을 파싱했습니다.`);
+      setUploadStatus('');
+      toast.success(`${data.length.toLocaleString()}개 행을 파싱했습니다.`);
     } catch (error) {
+      console.error('Parse error:', error);
       toast.error('파일 파싱 중 오류가 발생했습니다.');
       setParsedData([]);
+      setUploadStatus('');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // 업로드 실행
-  const handleUpload = useCallback((overwrite: boolean = false) => {
+  // 업로드 실행 (비동기 처리)
+  const handleUpload = useCallback(async (overwrite: boolean = false) => {
     if (parsedData.length === 0) return;
 
-    const materialCodes = getMaterialCodes();
-    const result = addData(parsedData, materialCodes, overwrite);
-
-    setUploadResult(result);
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadStatus('업로드 준비 중...');
     setShowDuplicateModal(false);
 
-    // 업로드 이력 저장
-    const historyKey = STORAGE_KEYS.UPLOAD_HISTORY;
-    const existing = localStorage.getItem(historyKey);
-    const history = existing ? JSON.parse(existing) : [];
-    history.unshift({
-      id: crypto.randomUUID(),
-      file_name: file?.name,
-      total_rows: parsedData.length,
-      new_rows: result.new,
-      duplicate_rows: result.duplicate,
-      recovery_target_rows: result.recoveryTarget,
-      uploaded_by: session?.userCode,
-      uploaded_at: new Date().toISOString(),
-    });
-    localStorage.setItem(historyKey, JSON.stringify(history.slice(0, 500)));
+    try {
+      // UI 업데이트를 위한 지연
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-    toast.success(`업로드 완료: 신규 ${result.new}건, 중복 ${result.duplicate}건`);
+      setUploadStatus('회수대상 자재 확인 중...');
+      setUploadProgress(10);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const materialCodes = getMaterialCodes();
+
+      setUploadStatus('데이터 처리 중...');
+      setUploadProgress(30);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // 실제 데이터 추가
+      const result = addData(parsedData, materialCodes, overwrite);
+
+      setUploadProgress(80);
+      setUploadStatus('이력 저장 중...');
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // 업로드 이력 저장
+      const historyKey = STORAGE_KEYS.UPLOAD_HISTORY;
+      const existing = localStorage.getItem(historyKey);
+      const history = existing ? JSON.parse(existing) : [];
+      history.unshift({
+        id: crypto.randomUUID(),
+        file_name: file?.name,
+        total_rows: parsedData.length,
+        new_rows: result.new,
+        duplicate_rows: result.duplicate,
+        recovery_target_rows: result.recoveryTarget,
+        uploaded_by: session?.userCode,
+        uploaded_at: new Date().toISOString(),
+      });
+      localStorage.setItem(historyKey, JSON.stringify(history.slice(0, 500)));
+
+      setUploadProgress(100);
+      setUploadStatus('완료!');
+      setUploadResult(result);
+
+      toast.success(`업로드 완료: 신규 ${result.new.toLocaleString()}건, 중복 ${result.duplicate.toLocaleString()}건`);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('업로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsUploading(false);
+      setUploadStatus('');
+      setUploadProgress(0);
+    }
   }, [parsedData, getMaterialCodes, addData, file, session]);
 
   // 업로드 버튼 클릭
-  const handleUploadClick = useCallback(() => {
-    if (parsedData.length === 0) return;
+  const handleUploadClick = useCallback(async () => {
+    if (parsedData.length === 0 || isUploading) return;
 
-    // 중복 체크
-    const materialCodes = getMaterialCodes();
-    const storedData = localStorage.getItem(STORAGE_KEYS.MATERIAL_USAGE);
-    const existingData = storedData ? JSON.parse(storedData) : [];
-    const existingKeys = new Set(
-      existingData.map((item: { request_number: string; branch_code: string; material_code: string }) =>
-        `${item.request_number}_${item.branch_code}_${item.material_code}`
-      )
-    );
+    setIsUploading(true);
+    setUploadStatus('중복 데이터 확인 중...');
+    setUploadProgress(5);
 
-    const duplicateCount = parsedData.filter((row) =>
-      existingKeys.has(`${row.request_number}_${row.branch_code}_${row.material_code}`)
-    ).length;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-    if (duplicateCount > 0) {
-      setShowDuplicateModal(true);
-    } else {
+      // 중복 체크
+      const storedData = localStorage.getItem(STORAGE_KEYS.MATERIAL_USAGE);
+      const existingData = storedData ? JSON.parse(storedData) : [];
+      const existingKeys = new Set(
+        existingData.map((item: { request_number: string; branch_code: string; material_code: string }) =>
+          `${item.request_number}_${item.branch_code}_${item.material_code}`
+        )
+      );
+
+      const duplicateCount = parsedData.filter((row) =>
+        existingKeys.has(`${row.request_number}_${row.branch_code}_${row.material_code}`)
+      ).length;
+
+      setIsUploading(false);
+      setUploadStatus('');
+      setUploadProgress(0);
+
+      if (duplicateCount > 0) {
+        setShowDuplicateModal(true);
+      } else {
+        handleUpload(false);
+      }
+    } catch (error) {
+      console.error('Check error:', error);
+      setIsUploading(false);
+      setUploadStatus('');
+      setUploadProgress(0);
+      // 에러가 발생해도 업로드 시도
       handleUpload(false);
     }
-  }, [parsedData, getMaterialCodes, handleUpload]);
+  }, [parsedData, isUploading, handleUpload]);
 
   // 초기화
   const handleReset = useCallback(() => {
     setFile(null);
     setParsedData([]);
     setUploadResult(null);
+    setUploadProgress(0);
+    setUploadStatus('');
   }, []);
 
   return (
@@ -171,11 +241,11 @@ export default function UploadPage() {
         <CardContent>
           <div
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              isLoading ? 'bg-gray-50' : 'hover:bg-gray-50 cursor-pointer'
+              isLoading || isUploading ? 'bg-gray-50 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'
             }`}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('file-input')?.click()}
+            onDrop={!isLoading && !isUploading ? handleDrop : undefined}
+            onClick={() => !isLoading && !isUploading && document.getElementById('file-input')?.click()}
           >
             <input
               id="file-input"
@@ -183,19 +253,20 @@ export default function UploadPage() {
               accept=".xlsx,.xls"
               onChange={handleFileChange}
               className="hidden"
-              disabled={isLoading}
+              disabled={isLoading || isUploading}
             />
             {isLoading ? (
               <div className="flex flex-col items-center gap-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-                <p>파일 처리 중...</p>
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                <p className="font-medium">파일 처리 중...</p>
+                {uploadStatus && <p className="text-sm text-muted-foreground">{uploadStatus}</p>}
               </div>
             ) : file ? (
               <div className="flex flex-col items-center gap-2">
                 <FileSpreadsheet className="h-12 w-12 text-green-600" />
                 <p className="font-medium">{file.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {parsedData.length}개 행 파싱 완료
+                  {parsedData.length.toLocaleString()}개 행 파싱 완료
                 </p>
               </div>
             ) : (
@@ -209,28 +280,55 @@ export default function UploadPage() {
             )}
           </div>
 
+          {/* 업로드 진행 상태 */}
+          {isUploading && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                <span className="font-medium text-blue-800">업로드 진행 중...</span>
+              </div>
+              {uploadStatus && (
+                <p className="text-sm text-blue-700 mb-2">{uploadStatus}</p>
+              )}
+              <div className="w-full bg-blue-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-blue-600 mt-1 text-right">{uploadProgress}%</p>
+            </div>
+          )}
+
           {/* 액션 버튼 */}
-          {parsedData.length > 0 && (
+          {parsedData.length > 0 && !isUploading && (
             <div className="flex gap-2 mt-4">
-              <Button onClick={handleUploadClick} disabled={isLoading}>
-                업로드 실행
+              <Button onClick={handleUploadClick} disabled={isLoading || isUploading}>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    업로드 중...
+                  </>
+                ) : (
+                  '업로드 실행'
+                )}
               </Button>
-              <Button variant="outline" onClick={handleReset}>
+              <Button variant="outline" onClick={handleReset} disabled={isUploading}>
                 초기화
               </Button>
             </div>
           )}
 
           {/* 업로드 결과 */}
-          {uploadResult && (
+          {uploadResult && !isUploading && (
             <div className="mt-4 p-4 bg-green-50 rounded-lg flex items-start gap-3">
               <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
               <div>
                 <p className="font-medium text-green-800">업로드 완료</p>
                 <ul className="text-sm text-green-700 mt-1">
-                  <li>신규 등록: {uploadResult.new}건</li>
-                  <li>중복 건수: {uploadResult.duplicate}건</li>
-                  <li>회수대상: {uploadResult.recoveryTarget}건</li>
+                  <li>신규 등록: {uploadResult.new.toLocaleString()}건</li>
+                  <li>중복 건수: {uploadResult.duplicate.toLocaleString()}건</li>
+                  <li>회수대상: {uploadResult.recoveryTarget.toLocaleString()}건</li>
                 </ul>
               </div>
             </div>
@@ -239,12 +337,12 @@ export default function UploadPage() {
       </Card>
 
       {/* 미리보기 */}
-      {parsedData.length > 0 && (
+      {parsedData.length > 0 && !isUploading && (
         <Card>
           <CardHeader>
             <CardTitle>데이터 미리보기</CardTitle>
             <CardDescription>
-              처음 50개 행을 미리보기로 표시합니다.
+              처음 50개 행을 미리보기로 표시합니다. (전체: {parsedData.length.toLocaleString()}개)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -276,7 +374,7 @@ export default function UploadPage() {
             </div>
             {parsedData.length > 50 && (
               <p className="text-sm text-muted-foreground mt-4">
-                ...외 {parsedData.length - 50}개 행
+                ...외 {(parsedData.length - 50).toLocaleString()}개 행
               </p>
             )}
           </CardContent>
