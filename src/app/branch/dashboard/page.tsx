@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Package, Clock, TruckIcon, CheckCircle2, Calendar, AlertTriangle, Filter } from 'lucide-react';
+import { Package, Clock, TruckIcon, CheckCircle2, AlertTriangle, Search, Printer } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,13 +16,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Alert,
   AlertDescription,
@@ -46,11 +39,12 @@ export default function BranchDashboardPage() {
   const [showOverdueWarning, setShowOverdueWarning] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
 
-  // 필터 상태
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [technicianFilter, setTechnicianFilter] = useState<string>('all');
-  const [groupByTechnician, setGroupByTechnician] = useState(false);
+  // 검색 상태
+  const [searchDateFrom, setSearchDateFrom] = useState('');
+  const [searchDateTo, setSearchDateTo] = useState('');
+  const [appliedDateFrom, setAppliedDateFrom] = useState('');
+  const [appliedDateTo, setAppliedDateTo] = useState('');
+  const [isSearched, setIsSearched] = useState(false);
 
   const { getByBranch, updateStatus, updateStatusBulk, getCarriers } = useMaterialUsage();
   const { session } = useAuth();
@@ -65,47 +59,57 @@ export default function BranchDashboardPage() {
     loadCarriers();
   }, [loadCarriers]);
 
+  // 오늘 날짜 기본값 설정
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setSearchDateFrom(today);
+    setSearchDateTo(today);
+  }, []);
+
   // 본인 법인 데이터
   const branchData = useMemo(() => {
     if (!session?.branchCode) return [];
     return getByBranch(session.branchCode);
   }, [getByBranch, session]);
 
-  // 기사코드 목록
-  const technicianCodes = useMemo(() => {
-    const codes = new Set<string>();
-    branchData.forEach(item => {
-      if (item.technician_code) {
-        codes.add(item.technician_code);
-      }
-    });
-    return Array.from(codes).sort();
-  }, [branchData]);
+  // 검색 실행
+  const handleSearch = () => {
+    setAppliedDateFrom(searchDateFrom);
+    setAppliedDateTo(searchDateTo);
+    setIsSearched(true);
+  };
 
-  // 필터링된 데이터
-  const filteredData = useMemo(() => {
+  // 검색된 데이터 (날짜 필터 적용)
+  const searchedData = useMemo(() => {
+    if (!isSearched) return [];
+
     return branchData.filter(item => {
-      // 날짜 필터
-      if (dateFrom || dateTo) {
-        const itemDate = item.process_time || item.receipt_time || item.created_at;
-        if (itemDate) {
-          const itemDateOnly = itemDate.split('T')[0];
-          if (dateFrom && itemDateOnly < dateFrom) return false;
-          if (dateTo && itemDateOnly > dateTo) return false;
-        }
-      }
-      // 기사코드 필터
-      if (technicianFilter !== 'all' && item.technician_code !== technicianFilter) {
-        return false;
+      const itemDate = item.process_time || item.receipt_time || item.created_at;
+      if (itemDate) {
+        const itemDateOnly = itemDate.split('T')[0];
+        if (appliedDateFrom && itemDateOnly < appliedDateFrom) return false;
+        if (appliedDateTo && itemDateOnly > appliedDateTo) return false;
       }
       return true;
     });
-  }, [branchData, dateFrom, dateTo, technicianFilter]);
+  }, [branchData, appliedDateFrom, appliedDateTo, isSearched]);
 
   // 상태별 데이터
-  const waitingData = useMemo(() => filteredData.filter((item) => item.status === '회수대기'), [filteredData]);
-  const collectedData = useMemo(() => filteredData.filter((item) => item.status === '회수완료'), [filteredData]);
-  const shippedData = useMemo(() => filteredData.filter((item) => item.status === '발송'), [filteredData]);
+  const waitingData = useMemo(() => searchedData.filter((item) => item.status === '회수대기'), [searchedData]);
+  const collectedData = useMemo(() => searchedData.filter((item) => item.status === '회수완료'), [searchedData]);
+  const shippedData = useMemo(() => searchedData.filter((item) => item.status === '발송'), [searchedData]);
+
+  // 기사코드별 회수대기 그룹화
+  const waitingByTechnician = useMemo(() => {
+    const groups: Record<string, MaterialUsage[]> = {};
+    waitingData.forEach(item => {
+      const key = item.technician_code || '미지정';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    // 기사코드 정렬
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [waitingData]);
 
   // 6일 경과 회수완료 건 체크
   const overdueItems = useMemo(() => {
@@ -125,19 +129,6 @@ export default function BranchDashboardPage() {
       setShowOverdueWarning(true);
     }
   }, [overdueItems]);
-
-  // 기사코드별 그룹화
-  const groupedByTechnician = useMemo(() => {
-    if (!groupByTechnician) return null;
-
-    const groups: Record<string, MaterialUsage[]> = {};
-    collectedData.forEach(item => {
-      const key = item.technician_code || '미지정';
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-    return groups;
-  }, [collectedData, groupByTechnician]);
 
   // 전체 선택
   const handleSelectAll = (checked: boolean) => {
@@ -202,28 +193,61 @@ export default function BranchDashboardPage() {
     setShowBulkShippingModal(false);
   };
 
-  // 필터 초기화
-  const handleResetFilters = () => {
-    setDateFrom('');
-    setDateTo('');
-    setTechnicianFilter('all');
+  // 인쇄
+  const handlePrint = () => {
+    window.print();
   };
 
-  // 상태별 통계
-  const stats = useMemo(() => ({
-    total: filteredData.length,
+  // 상태별 통계 (전체 데이터 기준)
+  const totalStats = useMemo(() => ({
+    total: branchData.length,
+    waiting: branchData.filter(item => item.status === '회수대기').length,
+    collected: branchData.filter(item => item.status === '회수완료').length,
+    shipped: branchData.filter(item => item.status === '발송').length,
+  }), [branchData]);
+
+  // 검색 결과 통계
+  const searchStats = useMemo(() => ({
+    total: searchedData.length,
     waiting: waitingData.length,
     collected: collectedData.length,
     shipped: shippedData.length,
     overdue: overdueItems.length,
-  }), [filteredData, waitingData, collectedData, shippedData, overdueItems]);
+  }), [searchedData, waitingData, collectedData, shippedData, overdueItems]);
 
   return (
     <div className="space-y-6">
       {/* 헤더 */}
       <div>
         <h1 className="text-2xl font-bold">회수 관리 대시보드</h1>
-        <p className="text-muted-foreground">회수대상 부품을 관리하고 발송합니다.</p>
+        <p className="text-muted-foreground">법인코드: {session?.branchCode}</p>
+      </div>
+
+      {/* 전체 현황 통계 */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="전체 회수대상"
+          value={totalStats.total.toLocaleString()}
+          icon={Package}
+        />
+        <StatCard
+          title="회수대기"
+          value={totalStats.waiting.toLocaleString()}
+          icon={Clock}
+          className="border-l-4 border-l-red-500"
+        />
+        <StatCard
+          title="회수완료 (발송대기)"
+          value={totalStats.collected.toLocaleString()}
+          icon={CheckCircle2}
+          className="border-l-4 border-l-amber-500"
+        />
+        <StatCard
+          title="발송완료"
+          value={totalStats.shipped.toLocaleString()}
+          icon={TruckIcon}
+          className="border-l-4 border-l-blue-500"
+        />
       </div>
 
       {/* 6일 경과 경고 */}
@@ -245,13 +269,10 @@ export default function BranchDashboardPage() {
         </Alert>
       )}
 
-      {/* 필터 영역 */}
+      {/* 날짜 검색 */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            <CardTitle className="text-base">필터</CardTitle>
-          </div>
+          <CardTitle className="text-base">날짜 검색</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-4 items-end">
@@ -259,262 +280,149 @@ export default function BranchDashboardPage() {
               <label className="text-sm text-muted-foreground">시작일</label>
               <Input
                 type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-40"
+                value={searchDateFrom}
+                onChange={(e) => setSearchDateFrom(e.target.value)}
+                className="w-44"
               />
             </div>
             <div className="space-y-1">
               <label className="text-sm text-muted-foreground">종료일</label>
               <Input
                 type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-40"
+                value={searchDateTo}
+                onChange={(e) => setSearchDateTo(e.target.value)}
+                className="w-44"
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground">기사코드</label>
-              <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="전체" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">전체</SelectItem>
-                  {technicianCodes.map(code => (
-                    <SelectItem key={code} value={code}>{code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button variant="outline" onClick={handleResetFilters}>
-              초기화
+            <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700">
+              <Search className="h-4 w-4 mr-2" />
+              검색
             </Button>
+            {isSearched && (
+              <Button variant="outline" onClick={handlePrint} className="print:hidden">
+                <Printer className="h-4 w-4 mr-2" />
+                인쇄
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <StatCard
-          title="전체 회수대상"
-          value={stats.total.toLocaleString()}
-          icon={Package}
-        />
-        <StatCard
-          title="회수대기"
-          value={stats.waiting.toLocaleString()}
-          icon={Clock}
-          className="border-l-4 border-l-red-500"
-        />
-        <StatCard
-          title="회수완료"
-          value={stats.collected.toLocaleString()}
-          icon={CheckCircle2}
-          className="border-l-4 border-l-amber-500"
-        />
-        <StatCard
-          title="발송완료"
-          value={stats.shipped.toLocaleString()}
-          icon={TruckIcon}
-          className="border-l-4 border-l-blue-500"
-        />
-        {stats.overdue > 0 && (
-          <StatCard
-            title="6일 경과"
-            value={stats.overdue.toLocaleString()}
-            icon={AlertTriangle}
-            className="border-l-4 border-l-red-600 bg-red-50"
-          />
-        )}
-      </div>
+      {/* 검색 결과 */}
+      {isSearched && (
+        <>
+          {/* 검색 결과 통계 */}
+          <div className="bg-gray-50 p-4 rounded-lg print:bg-white print:border">
+            <p className="text-sm text-muted-foreground mb-2">
+              검색 기간: {appliedDateFrom} ~ {appliedDateTo}
+            </p>
+            <div className="flex gap-6 text-sm">
+              <span>회수대기: <strong className="text-red-600">{searchStats.waiting}건</strong></span>
+              <span>회수완료: <strong className="text-amber-600">{searchStats.collected}건</strong></span>
+              <span>발송완료: <strong className="text-blue-600">{searchStats.shipped}건</strong></span>
+            </div>
+          </div>
 
-      {/* 탭 */}
-      <Tabs defaultValue="waiting">
-        <TabsList>
-          <TabsTrigger value="waiting">
-            회수대기 ({stats.waiting})
-          </TabsTrigger>
-          <TabsTrigger value="collected">
-            회수완료 ({stats.collected})
-            {stats.overdue > 0 && (
-              <Badge variant="destructive" className="ml-1">{stats.overdue}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="shipped">
-            발송완료 ({stats.shipped})
-          </TabsTrigger>
-        </TabsList>
+          {/* 탭 */}
+          <Tabs defaultValue="waiting">
+            <TabsList className="print:hidden">
+              <TabsTrigger value="waiting">
+                회수대기 ({searchStats.waiting})
+              </TabsTrigger>
+              <TabsTrigger value="collected">
+                회수완료 ({searchStats.collected})
+                {searchStats.overdue > 0 && (
+                  <Badge variant="destructive" className="ml-1">{searchStats.overdue}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="shipped">
+                발송완료 ({searchStats.shipped})
+              </TabsTrigger>
+            </TabsList>
 
-        {/* 회수대기 탭 */}
-        <TabsContent value="waiting">
-          <Card>
-            <CardHeader>
-              <CardTitle>회수대기 목록</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {waitingData.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>요청번호</TableHead>
-                      <TableHead>기사코드</TableHead>
-                      <TableHead>모델명</TableHead>
-                      <TableHead>자재코드</TableHead>
-                      <TableHead>자재명</TableHead>
-                      <TableHead>수량</TableHead>
-                      <TableHead>상태</TableHead>
-                      <TableHead className="w-[120px]">액션</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {waitingData.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.request_number}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.technician_code || '-'}</Badge>
-                        </TableCell>
-                        <TableCell>{item.model_name}</TableCell>
-                        <TableCell>{item.material_code}</TableCell>
-                        <TableCell className="max-w-[200px] truncate">{item.material_name}</TableCell>
-                        <TableCell>{item.output_quantity}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={item.status} size="sm" />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedItem(item);
-                              setShowCollectModal(true);
-                            }}
-                          >
-                            회수완료
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-center py-8 text-muted-foreground">
-                  회수대기 중인 건이 없습니다.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* 회수완료 탭 */}
-        <TabsContent value="collected">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>회수완료 목록 (발송 대기)</CardTitle>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={groupByTechnician}
-                      onCheckedChange={(checked) => setGroupByTechnician(!!checked)}
-                    />
-                    기사코드별 그룹화
-                  </label>
-                  {selectedItems.size > 0 && (
-                    <Button onClick={() => setShowBulkShippingModal(true)}>
-                      <TruckIcon className="h-4 w-4 mr-2" />
-                      선택 일괄발송 ({selectedItems.size})
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {collectedData.length > 0 ? (
-                <>
-                  {groupByTechnician && groupedByTechnician ? (
-                    // 기사코드별 그룹화 뷰
-                    Object.entries(groupedByTechnician).map(([techCode, items]) => (
-                      <div key={techCode} className="mb-6">
-                        <h3 className="font-medium mb-2 flex items-center gap-2">
-                          <Badge>{techCode}</Badge>
-                          <span className="text-muted-foreground text-sm">({items.length}건)</span>
-                        </h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-[50px]">
-                                <Checkbox
-                                  checked={items.every(item => selectedItems.has(item.id))}
-                                  onCheckedChange={(checked) => {
-                                    const newSelected = new Set(selectedItems);
-                                    items.forEach(item => {
-                                      if (checked) {
-                                        newSelected.add(item.id);
-                                      } else {
-                                        newSelected.delete(item.id);
-                                      }
-                                    });
-                                    setSelectedItems(newSelected);
-                                  }}
-                                />
-                              </TableHead>
-                              <TableHead>요청번호</TableHead>
-                              <TableHead>자재코드</TableHead>
-                              <TableHead>자재명</TableHead>
-                              <TableHead>수량</TableHead>
-                              <TableHead>회수일시</TableHead>
-                              <TableHead>경과일</TableHead>
-                              <TableHead className="w-[100px]">액션</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {items.map((item) => {
-                              const daysPassed = item.collected_at
-                                ? Math.floor((new Date().getTime() - new Date(item.collected_at).getTime()) / (1000 * 60 * 60 * 24))
-                                : 0;
-                              const isOverdue = daysPassed >= 6;
-
-                              return (
-                                <TableRow key={item.id} className={isOverdue ? 'bg-red-50' : ''}>
-                                  <TableCell>
-                                    <Checkbox
-                                      checked={selectedItems.has(item.id)}
-                                      onCheckedChange={(checked) => handleSelectItem(item.id, !!checked)}
-                                    />
-                                  </TableCell>
+            {/* 회수대기 탭 - 기사별 그룹화 */}
+            <TabsContent value="waiting">
+              <Card>
+                <CardHeader>
+                  <CardTitle>회수대기 목록 (기사별)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {waitingByTechnician.length > 0 ? (
+                    <div className="space-y-6">
+                      {waitingByTechnician.map(([techCode, items]) => (
+                        <div key={techCode} className="border rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+                            <Badge className="text-base px-3 py-1">{techCode}</Badge>
+                            <span className="text-muted-foreground">({items.length}건)</span>
+                          </div>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[130px]">요청번호</TableHead>
+                                <TableHead>처리시간</TableHead>
+                                <TableHead>모델명</TableHead>
+                                <TableHead>자재코드</TableHead>
+                                <TableHead>자재명</TableHead>
+                                <TableHead className="w-[60px]">수량</TableHead>
+                                <TableHead className="w-[100px] print:hidden">액션</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {items.map((item) => (
+                                <TableRow key={item.id}>
                                   <TableCell className="font-medium">{item.request_number}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {item.process_time
+                                      ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                      : '-'}
+                                  </TableCell>
+                                  <TableCell>{item.model_name}</TableCell>
                                   <TableCell>{item.material_code}</TableCell>
-                                  <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
+                                  <TableCell className="max-w-[200px] truncate">{item.material_name}</TableCell>
                                   <TableCell>{item.output_quantity}</TableCell>
-                                  <TableCell className="text-muted-foreground text-sm">
-                                    {item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR') : '-'}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant={isOverdue ? 'destructive' : 'secondary'}>
-                                      D+{daysPassed}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
+                                  <TableCell className="print:hidden">
                                     <Button
                                       size="sm"
-                                      variant="outline"
                                       onClick={() => {
                                         setSelectedItem(item);
-                                        setShowShippingModal(true);
+                                        setShowCollectModal(true);
                                       }}
                                     >
-                                      발송
+                                      회수완료
                                     </Button>
                                   </TableCell>
                                 </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    ))
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    // 일반 리스트 뷰
+                    <p className="text-center py-8 text-muted-foreground">
+                      해당 기간에 회수대기 건이 없습니다.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* 회수완료 탭 */}
+            <TabsContent value="collected">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>회수완료 목록 (발송 대기)</CardTitle>
+                    {selectedItems.size > 0 && (
+                      <Button onClick={() => setShowBulkShippingModal(true)}>
+                        <TruckIcon className="h-4 w-4 mr-2" />
+                        선택 일괄발송 ({selectedItems.size})
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {collectedData.length > 0 ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -525,13 +433,13 @@ export default function BranchDashboardPage() {
                             />
                           </TableHead>
                           <TableHead>요청번호</TableHead>
+                          <TableHead>처리시간</TableHead>
                           <TableHead>기사코드</TableHead>
                           <TableHead>자재코드</TableHead>
                           <TableHead>자재명</TableHead>
                           <TableHead>수량</TableHead>
                           <TableHead>회수일시</TableHead>
                           <TableHead>경과일</TableHead>
-                          <TableHead>상태</TableHead>
                           <TableHead className="w-[100px]">액션</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -551,6 +459,11 @@ export default function BranchDashboardPage() {
                                 />
                               </TableCell>
                               <TableCell className="font-medium">{item.request_number}</TableCell>
+                              <TableCell className="text-muted-foreground text-sm">
+                                {item.process_time
+                                  ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                  : '-'}
+                              </TableCell>
                               <TableCell>
                                 <Badge variant="outline">{item.technician_code || '-'}</Badge>
                               </TableCell>
@@ -558,15 +471,12 @@ export default function BranchDashboardPage() {
                               <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
                               <TableCell>{item.output_quantity}</TableCell>
                               <TableCell className="text-muted-foreground text-sm">
-                                {item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR') : '-'}
+                                {item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
                               </TableCell>
                               <TableCell>
                                 <Badge variant={isOverdue ? 'destructive' : 'secondary'}>
                                   D+{daysPassed}
                                 </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <StatusBadge status={item.status} size="sm" />
                               </TableCell>
                               <TableCell>
                                 <Button
@@ -585,70 +495,87 @@ export default function BranchDashboardPage() {
                         })}
                       </TableBody>
                     </Table>
+                  ) : (
+                    <p className="text-center py-8 text-muted-foreground">
+                      해당 기간에 발송 대기 건이 없습니다.
+                    </p>
                   )}
-                </>
-              ) : (
-                <p className="text-center py-8 text-muted-foreground">
-                  발송 대기 중인 건이 없습니다.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-        {/* 발송완료 탭 */}
-        <TabsContent value="shipped">
-          <Card>
-            <CardHeader>
-              <CardTitle>발송완료 목록</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {shippedData.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>요청번호</TableHead>
-                      <TableHead>기사코드</TableHead>
-                      <TableHead>자재코드</TableHead>
-                      <TableHead>자재명</TableHead>
-                      <TableHead>운송회사</TableHead>
-                      <TableHead>송장번호</TableHead>
-                      <TableHead>발송일시</TableHead>
-                      <TableHead>상태</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {shippedData.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">{item.request_number}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.technician_code || '-'}</Badge>
-                        </TableCell>
-                        <TableCell>{item.material_code}</TableCell>
-                        <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
-                        <TableCell>{item.carrier}</TableCell>
-                        <TableCell>{item.tracking_number}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {item.shipped_at
-                            ? new Date(item.shipped_at).toLocaleString('ko-KR')
-                            : '-'}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={item.status} size="sm" />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-center py-8 text-muted-foreground">
-                  발송 완료된 건이 없습니다.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            {/* 발송완료 탭 */}
+            <TabsContent value="shipped">
+              <Card>
+                <CardHeader>
+                  <CardTitle>발송완료 목록</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {shippedData.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>요청번호</TableHead>
+                          <TableHead>처리시간</TableHead>
+                          <TableHead>기사코드</TableHead>
+                          <TableHead>자재코드</TableHead>
+                          <TableHead>자재명</TableHead>
+                          <TableHead>운송회사</TableHead>
+                          <TableHead>송장번호</TableHead>
+                          <TableHead>발송일시</TableHead>
+                          <TableHead>상태</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {shippedData.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="font-medium">{item.request_number}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {item.process_time
+                                ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{item.technician_code || '-'}</Badge>
+                            </TableCell>
+                            <TableCell>{item.material_code}</TableCell>
+                            <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
+                            <TableCell>{item.carrier}</TableCell>
+                            <TableCell>{item.tracking_number}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {item.shipped_at
+                                ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={item.status} size="sm" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-center py-8 text-muted-foreground">
+                      해당 기간에 발송 완료 건이 없습니다.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
+
+      {/* 검색 전 안내 */}
+      {!isSearched && (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p className="text-lg">날짜를 선택하고 검색 버튼을 눌러주세요.</p>
+            <p className="text-sm mt-2">검색 결과가 기사별로 그룹화되어 표시됩니다.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 회수완료 확인 모달 */}
       <ConfirmModal
@@ -684,6 +611,27 @@ export default function BranchDashboardPage() {
         requestNumber={`일괄 발송 (${selectedItems.size}건)`}
         isBulk={true}
       />
+
+      {/* 인쇄용 스타일 */}
+      <style jsx global>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .space-y-6, .space-y-6 * {
+            visibility: visible;
+          }
+          .space-y-6 {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
