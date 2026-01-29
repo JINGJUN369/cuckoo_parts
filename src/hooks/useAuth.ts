@@ -10,6 +10,9 @@ const AUTH_MAP: Record<string, { type: UserType; redirect: string }> = {
   'CUCKOO품질팀': { type: 'admin_quality', redirect: '/admin-quality/dashboard' },
 };
 
+// 관리자 초기 비밀번호
+const ADMIN_DEFAULT_PASSWORD = '12345678';
+
 // 설치법인 코드 패턴 (SA01, SA02, ... 또는 다른 패턴)
 const BRANCH_CODE_PATTERN = /^[A-Z]{2}\d{2}$/;
 
@@ -95,12 +98,12 @@ export function useAuth() {
         }
       } else if (AUTH_MAP[trimmedCode]) {
         // 관리자 계정 - 초기 비밀번호로 로그인 시도
-        if (trimmedPassword === trimmedCode) {
+        if (trimmedPassword === ADMIN_DEFAULT_PASSWORD) {
           // 사용자 자동 생성
           const { error: insertError } = await supabase.from('users').insert({
             user_code: trimmedCode,
             user_type: AUTH_MAP[trimmedCode].type,
-            password_hash: trimmedCode,
+            password_hash: ADMIN_DEFAULT_PASSWORD,
             is_default_password: true,
           });
 

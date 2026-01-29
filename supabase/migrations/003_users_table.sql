@@ -13,12 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
   last_login_at TIMESTAMP
 );
 
--- 초기 관리자 계정 생성 (비밀번호는 ID와 동일)
+-- 초기 관리자 계정 생성 (비밀번호는 12345678)
 -- 실제로는 해시값을 사용해야 하지만, 단순화를 위해 평문 저장 후 앱에서 해시 비교
 INSERT INTO users (user_code, user_type, password_hash, is_default_password)
 VALUES
-  ('고객만족팀CS', 'admin_cs', '고객만족팀CS', true),
-  ('CUCKOO품질팀', 'admin_quality', 'CUCKOO품질팀', true)
+  ('고객만족팀CS', 'admin_cs', '12345678', true),
+  ('CUCKOO품질팀', 'admin_quality', '12345678', true)
 ON CONFLICT (user_code) DO NOTHING;
 
 -- RLS 비활성화
