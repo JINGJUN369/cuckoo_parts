@@ -233,34 +233,55 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
   // Calculate tooltip position
   const getTooltipStyle = () => {
     const position = step.position || 'bottom';
-    const tooltipWidth = 320;
-    const tooltipHeight = 180;
+    const tooltipWidth = 420; // 넓게 변경 (320 → 420)
+    const tooltipHeight = step.isInteractive ? 320 : 240; // 높이도 증가
 
     let top = 0;
     let left = 0;
 
+    // 화면 중앙 좌표
+    const viewportCenterY = window.innerHeight / 2;
+    const viewportCenterX = window.innerWidth / 2;
+
     switch (position) {
       case 'top':
-        top = targetRect.top - tooltipHeight - 16;
+        top = targetRect.top - tooltipHeight - 20;
         left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
         break;
       case 'bottom':
-        top = targetRect.bottom + 16;
+        top = targetRect.bottom + 20;
         left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
         break;
       case 'left':
         top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 2);
-        left = targetRect.left - tooltipWidth - 16;
+        left = targetRect.left - tooltipWidth - 20;
         break;
       case 'right':
         top = targetRect.top + (targetRect.height / 2) - (tooltipHeight / 2);
-        left = targetRect.right + 16;
+        left = targetRect.right + 20;
         break;
     }
 
-    // Keep within viewport
-    left = Math.max(16, Math.min(left, window.innerWidth - tooltipWidth - 16));
-    top = Math.max(16, Math.min(top, window.innerHeight - tooltipHeight - 16));
+    // 화면 밖으로 나가면 반대쪽이나 중앙으로 이동
+    const minMargin = 24;
+    const maxTop = window.innerHeight - tooltipHeight - minMargin;
+    const maxLeft = window.innerWidth - tooltipWidth - minMargin;
+
+    // 아래쪽으로 너무 내려가면 화면 중앙 위쪽으로 이동
+    if (top > maxTop) {
+      top = Math.min(viewportCenterY - tooltipHeight / 2, maxTop);
+    }
+    // 위쪽으로 너무 올라가면 조정
+    if (top < minMargin) {
+      top = minMargin;
+    }
+
+    // 좌우 조정
+    if (left < minMargin) {
+      left = minMargin;
+    } else if (left > maxLeft) {
+      left = maxLeft;
+    }
 
     return { top, left, width: tooltipWidth };
   };
@@ -306,49 +327,49 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
         }}
       />
 
-      {/* Tooltip */}
+      {/* Tooltip - 크기 및 글씨 확대 */}
       <div
-        className="absolute bg-white rounded-xl shadow-2xl p-5 animate-in fade-in slide-in-from-bottom-2 duration-300"
+        className="absolute bg-white rounded-2xl shadow-2xl p-6 animate-in fade-in slide-in-from-bottom-2 duration-300"
         style={tooltipStyle}
       >
         {/* Close button */}
         <button
           onClick={handleSkip}
-          className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors"
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5" />
         </button>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-1.5 mb-3">
+        <div className="flex items-center gap-2 mb-4">
           {steps.map((_, idx) => (
             <div
               key={idx}
-              className={`h-1.5 rounded-full transition-all ${
+              className={`h-2 rounded-full transition-all ${
                 idx === currentStep
-                  ? 'w-6 bg-blue-500'
+                  ? 'w-8 bg-blue-500'
                   : idx < currentStep
-                    ? 'w-1.5 bg-blue-300'
-                    : 'w-1.5 bg-gray-200'
+                    ? 'w-2 bg-blue-300'
+                    : 'w-2 bg-gray-200'
               }`}
             />
           ))}
-          <span className="ml-2 text-xs text-gray-400">
+          <span className="ml-3 text-sm text-gray-500 font-medium">
             {currentStep + 1} / {steps.length}
           </span>
         </div>
 
-        {/* Content */}
-        <h3 className="text-lg font-bold text-gray-900 mb-2">{step.title}</h3>
-        <p className="text-sm text-gray-600 leading-relaxed mb-4">{step.content}</p>
+        {/* Content - 글씨 크기 증가 */}
+        <h3 className="text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
+        <p className="text-base text-gray-600 leading-relaxed mb-5 whitespace-pre-line">{step.content}</p>
 
         {/* Interactive Demo Button */}
         {step.isInteractive && onDemoAction && (
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-xs text-blue-600 mb-2">👆 아래 버튼을 눌러 연습해보세요!</p>
+          <div className="mb-5 p-4 bg-blue-50 rounded-xl border-2 border-blue-200">
+            <p className="text-sm text-blue-700 mb-3 font-medium">👆 아래 버튼을 눌러 연습해보세요!</p>
             <Button
-              size="sm"
-              className="w-full bg-green-600 hover:bg-green-700"
+              size="lg"
+              className="w-full bg-green-600 hover:bg-green-700 text-base py-3"
               onClick={handleDemoAction}
               disabled={isDemoLoading}
             >
@@ -358,8 +379,8 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
         )}
 
         {/* Navigation */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-3">
+        <div className="flex items-center justify-between pt-2">
+          <div className="flex gap-4">
             <button
               onClick={handleSkip}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
@@ -377,18 +398,16 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
             {currentStep > 0 && (
               <Button
                 variant="outline"
-                size="sm"
                 onClick={handlePrev}
-                className="gap-1"
+                className="gap-1 px-4 py-2"
               >
                 <ChevronLeft className="h-4 w-4" />
                 이전
               </Button>
             )}
             <Button
-              size="sm"
               onClick={handleNext}
-              className="gap-1 bg-blue-600 hover:bg-blue-700"
+              className="gap-1 bg-blue-600 hover:bg-blue-700 px-5 py-2"
             >
               {currentStep === steps.length - 1 ? '완료' : '다음'}
               {currentStep < steps.length - 1 && <ChevronRight className="h-4 w-4" />}
