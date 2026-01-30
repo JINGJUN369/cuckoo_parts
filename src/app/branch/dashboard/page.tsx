@@ -2583,7 +2583,7 @@ export default function BranchDashboardPage() {
           /* 패킹 슬립 전용 페이지 설정 (세로 모드) */
           @page packing {
             size: A4 portrait;
-            margin: 15mm;
+            margin: 10mm;
           }
 
           /* 패킹 슬립 스타일 (제품 1장씩 출력) */
@@ -2591,9 +2591,10 @@ export default function BranchDashboardPage() {
             page: packing;
             page-break-after: always;
             page-break-inside: avoid;
-            padding: 10mm;
+            padding: 5mm;
             width: 100%;
-            max-height: 257mm; /* A4 세로 - 마진 */
+            height: auto;
+            max-height: 277mm; /* A4 세로 297mm - 마진 20mm */
             box-sizing: border-box;
           }
 
@@ -2603,44 +2604,44 @@ export default function BranchDashboardPage() {
 
           .packing-header {
             text-align: center;
-            border-bottom: 3px solid #333;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 5px;
+            margin-bottom: 8px;
           }
 
           .packing-header h1 {
-            font-size: 20pt;
+            font-size: 16pt;
             font-weight: bold;
-            margin: 0 0 8px 0;
+            margin: 0 0 3px 0;
           }
 
           .packing-header .packing-no {
-            font-size: 12pt;
+            font-size: 10pt;
             color: #666;
             margin: 0;
           }
 
           .packing-content {
-            padding: 10px 0;
+            padding: 5px 0;
           }
 
           .packing-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 10px 0;
+            margin: 5px 0;
           }
 
           .packing-table th,
           .packing-table td {
-            border: 2px solid #333;
-            padding: 12px 15px;
-            font-size: 12pt;
+            border: 1px solid #333;
+            padding: 6px 10px;
+            font-size: 10pt;
           }
 
           .packing-table th {
             background: #f0f0f0;
             font-weight: bold;
-            width: 30%;
+            width: 25%;
             text-align: left;
           }
 
@@ -2650,26 +2651,26 @@ export default function BranchDashboardPage() {
 
           .packing-table td.highlight {
             font-weight: bold;
-            font-size: 14pt;
+            font-size: 11pt;
             background: #fffde7;
           }
 
           .packing-footer {
-            border-top: 2px solid #333;
-            padding-top: 10px;
-            margin-top: 15px;
-            font-size: 10pt;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            margin-top: 8px;
+            font-size: 9pt;
             color: #666;
           }
 
           .packing-footer p {
-            margin: 3px 0;
+            margin: 2px 0;
           }
 
           .packing-footer .note {
             font-style: italic;
             color: #888;
-            margin-top: 8px;
+            margin-top: 5px;
           }
 
           /* 자재 패킹리스트 (리스트 형태) */
