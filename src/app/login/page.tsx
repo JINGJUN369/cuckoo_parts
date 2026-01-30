@@ -84,7 +84,7 @@ export default function LoginPage() {
             />
           </div>
           <div className="flex items-center justify-center gap-2">
-            <CardTitle className="text-2xl">회수관리 시스템</CardTitle>
+            <CardTitle className="text-2xl">쿠쿠 회수관리 시스템</CardTitle>
             <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
           </div>
           <CardDescription>

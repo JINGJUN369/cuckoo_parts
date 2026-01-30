@@ -23,7 +23,7 @@ export function BranchHeader() {
           <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-bold text-lg">회수관리 시스템</h1>
+              <h1 className="font-bold text-lg">쿠쿠 회수관리 시스템</h1>
               <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
             </div>
             <p className="text-sm text-muted-foreground">

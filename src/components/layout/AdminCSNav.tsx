@@ -48,7 +48,7 @@ export function AdminCSNav() {
           <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain" />
           <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
         </div>
-        <span className="font-bold text-sm text-gray-700">회수관리 시스템</span>
+        <span className="font-bold text-sm text-gray-700">쿠쿠 회수관리 시스템</span>
         <p className="text-xs text-muted-foreground mt-1">고객만족팀CS</p>
       </div>
 
