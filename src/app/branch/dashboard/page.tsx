@@ -779,22 +779,22 @@ export default function BranchDashboardPage() {
 
       {/* 메인 탭 (통합/자재/제품) */}
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'overview' | 'material' | 'product')} className="print:hidden">
-        <TabsList className="grid w-full grid-cols-3 mb-4 h-14 p-1 bg-gray-100">
+        <TabsList className="grid w-full grid-cols-3 mb-4 h-14 p-1.5 bg-gray-50 border border-gray-200 rounded-lg">
           <TabsTrigger
             value="overview"
-            className="text-base h-12 data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg font-semibold"
+            className="text-base h-11 border-2 border-purple-300 bg-white text-purple-700 data-[state=active]:bg-purple-500 data-[state=active]:text-white data-[state=active]:border-purple-500 data-[state=active]:shadow-md font-semibold rounded-md transition-all"
           >
             📊 통합 현황
           </TabsTrigger>
           <TabsTrigger
             value="material"
-            className="text-base h-12 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg font-semibold"
+            className="text-base h-11 border-2 border-blue-300 bg-white text-blue-700 data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:border-blue-500 data-[state=active]:shadow-md font-semibold rounded-md transition-all"
           >
             🔧 자재 ({totalStats.total})
           </TabsTrigger>
           <TabsTrigger
             value="product"
-            className="text-base h-12 data-[state=active]:bg-green-600 data-[state=active]:text-white data-[state=active]:shadow-lg font-semibold"
+            className="text-base h-11 border-2 border-green-300 bg-white text-green-700 data-[state=active]:bg-green-500 data-[state=active]:text-white data-[state=active]:border-green-500 data-[state=active]:shadow-md font-semibold rounded-md transition-all"
           >
             📦 제품 ({productTotalStats.total})
           </TabsTrigger>
@@ -2580,13 +2580,21 @@ export default function BranchDashboardPage() {
             margin: 10mm;
           }
 
+          /* 패킹 슬립 전용 페이지 설정 (세로 모드) */
+          @page packing {
+            size: A4 portrait;
+            margin: 15mm;
+          }
+
           /* 패킹 슬립 스타일 (제품 1장씩 출력) */
           .packing-slip {
+            page: packing;
             page-break-after: always;
-            padding: 15mm;
-            min-height: 250mm;
-            display: flex;
-            flex-direction: column;
+            page-break-inside: avoid;
+            padding: 10mm;
+            width: 100%;
+            max-height: 257mm; /* A4 세로 - 마진 */
+            box-sizing: border-box;
           }
 
           .packing-slip:last-child {
@@ -2596,95 +2604,72 @@ export default function BranchDashboardPage() {
           .packing-header {
             text-align: center;
             border-bottom: 3px solid #333;
-            padding-bottom: 15px;
-            margin-bottom: 20px;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
           }
 
           .packing-header h1 {
-            font-size: 24pt;
+            font-size: 20pt;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin: 0 0 8px 0;
           }
 
-          .packing-header .slip-type {
-            font-size: 14pt;
+          .packing-header .packing-no {
+            font-size: 12pt;
             color: #666;
-            margin-bottom: 10px;
-          }
-
-          .packing-header .slip-date {
-            font-size: 11pt;
-            color: #888;
+            margin: 0;
           }
 
           .packing-content {
-            flex: 1;
-            padding: 20px 0;
-          }
-
-          .packing-content .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px dashed #ccc;
-            font-size: 12pt;
-          }
-
-          .packing-content .info-row .label {
-            font-weight: bold;
-            color: #333;
-            min-width: 120px;
-          }
-
-          .packing-content .info-row .value {
-            text-align: right;
-            color: #000;
-          }
-
-          .packing-content .main-item {
-            font-size: 16pt;
-            font-weight: bold;
-            background: #f5f5f5;
-            padding: 15px;
-            margin: 20px 0;
-            text-align: center;
-            border: 2px solid #333;
+            padding: 10px 0;
           }
 
           .packing-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 15px 0;
+            margin: 10px 0;
           }
 
           .packing-table th,
           .packing-table td {
-            border: 1px solid #333;
-            padding: 10px;
-            text-align: center;
-            font-size: 11pt;
+            border: 2px solid #333;
+            padding: 12px 15px;
+            font-size: 12pt;
           }
 
           .packing-table th {
-            background: #e8e8e8;
+            background: #f0f0f0;
             font-weight: bold;
+            width: 30%;
+            text-align: left;
+          }
+
+          .packing-table td {
+            text-align: left;
+          }
+
+          .packing-table td.highlight {
+            font-weight: bold;
+            font-size: 14pt;
+            background: #fffde7;
           }
 
           .packing-footer {
             border-top: 2px solid #333;
-            padding-top: 15px;
-            margin-top: auto;
+            padding-top: 10px;
+            margin-top: 15px;
             font-size: 10pt;
             color: #666;
           }
 
           .packing-footer p {
-            margin: 5px 0;
+            margin: 3px 0;
           }
 
           .packing-footer .note {
             font-style: italic;
             color: #888;
+            margin-top: 8px;
           }
 
           /* 자재 패킹리스트 (리스트 형태) */
