@@ -1,6 +1,7 @@
 'use client';
 
-import { Package, LogOut } from 'lucide-react';
+import Image from 'next/image';
+import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -19,11 +20,11 @@ export function BranchHeader() {
     <header className="bg-white border-b px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Package className="h-6 w-6 text-orange-600" />
+          <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain" />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-bold text-lg">부품 회수 관리</h1>
-              <span className="text-xs text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
+              <h1 className="font-bold text-lg">회수관리 시스템</h1>
+              <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
             </div>
             <p className="text-sm text-muted-foreground">
               설치법인: {session?.branchCode}

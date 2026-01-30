@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Package, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
+import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -73,13 +74,18 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-              <Package className="h-8 w-8 text-blue-600" />
-            </div>
+            <Image
+              src="/cuckoo-logo.png"
+              alt="CUCKOO"
+              width={120}
+              height={40}
+              className="object-contain"
+              priority
+            />
           </div>
           <div className="flex items-center justify-center gap-2">
-            <CardTitle className="text-2xl">부품 회수 관리 시스템</CardTitle>
-            <span className="text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
+            <CardTitle className="text-2xl">회수관리 시스템</CardTitle>
+            <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
           </div>
           <CardDescription>
             아이디와 비밀번호를 입력해주세요

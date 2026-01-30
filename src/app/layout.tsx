@@ -10,8 +10,8 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "부품 회수 관리 시스템",
-  description: "쿠쿠 부품 회수 관리 시스템 (Parts Recovery Management System)",
+  title: "쿠쿠 회수관리 시스템",
+  description: "쿠쿠 회수관리 시스템 (CUCKOO Recovery Management System)",
 };
 
 export default function RootLayout({

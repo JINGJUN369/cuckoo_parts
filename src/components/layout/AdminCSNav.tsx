@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import Image from 'next/image';
 import {
   LayoutDashboard,
   Upload,
@@ -43,11 +44,11 @@ export function AdminCSNav() {
     <aside className="w-64 bg-white border-r min-h-screen flex flex-col">
       {/* 헤더 */}
       <div className="p-4 border-b">
-        <div className="flex items-center gap-2">
-          <Package className="h-6 w-6 text-blue-600" />
-          <span className="font-bold text-lg">부품 회수 관리</span>
-          <span className="text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
+        <div className="flex items-center gap-2 mb-1">
+          <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain" />
+          <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
         </div>
+        <span className="font-bold text-sm text-gray-700">회수관리 시스템</span>
         <p className="text-xs text-muted-foreground mt-1">고객만족팀CS</p>
       </div>
 

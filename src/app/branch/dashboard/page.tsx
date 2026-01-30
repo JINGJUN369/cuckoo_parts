@@ -106,7 +106,7 @@ const createTourSteps = (hasWaitingData: boolean, hasCollectedData: boolean): To
   steps.push({
     target: '#tour-stat-cards',
     title: '🎉 가이드 완료!',
-    content: '축하합니다! 이제 부품 회수 관리를 시작할 준비가 되었습니다.\n\n✅ 회수대기 → 회수완료 → 발송 순서로 처리하세요.\n❓ 궁금하면 우측 상단 "가이드 다시보기"를 클릭하세요.',
+    content: '축하합니다! 이제 회수관리를 시작할 준비가 되었습니다.\n\n✅ 회수대기 → 회수완료 → 발송 순서로 처리하세요.\n❓ 궁금하면 우측 상단 "가이드 다시보기"를 클릭하세요.',
     position: 'bottom',
   });
 
