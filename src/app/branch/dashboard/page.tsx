@@ -115,6 +115,33 @@ const createTourSteps = (hasWaitingData: boolean, hasCollectedData: boolean): To
 
 const TOUR_STORAGE_KEY = 'branch-dashboard-tour-completed';
 
+// 모델명에 따른 받는 주소 결정
+const DEFAULT_RECIPIENT_ADDRESS = '경기도 시흥시 정왕동 엠티브이북로 349 품질팀';
+
+function getRecipientAddress(modelName?: string): { recipient: string; address: string } {
+  if (!modelName) {
+    return { recipient: '품질팀', address: DEFAULT_RECIPIENT_ADDRESS };
+  }
+
+  const upperModel = modelName.toUpperCase();
+
+  // CBT-C, CBT-D, CBT-I, CBT-L → 나누텍
+  if (upperModel.startsWith('CBT-C') ||
+      upperModel.startsWith('CBT-D') ||
+      upperModel.startsWith('CBT-I') ||
+      upperModel.startsWith('CBT-L')) {
+    return { recipient: '나누텍', address: '경기 김포시 황금로 127번길 117' };
+  }
+
+  // CWC-A → 로보터스
+  if (upperModel.startsWith('CWC-A')) {
+    return { recipient: '로보터스', address: '경기 성남시 판교로 700, 분당테크노파크 E동 106호' };
+  }
+
+  // 기본값 → 품질팀
+  return { recipient: '품질팀', address: DEFAULT_RECIPIENT_ADDRESS };
+}
+
 // 날짜 프리셋 타입
 type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth' | 'last30days';
 
@@ -2392,6 +2419,9 @@ export default function BranchDashboardPage() {
           <div style={{ marginTop: '30px', borderTop: '1px dashed #999', paddingTop: '15px', fontSize: '10pt' }}>
             <p><strong>발송 법인:</strong> {session?.branchCode}</p>
             <p><strong>발송 일자:</strong> {new Date().toLocaleDateString('ko-KR')}</p>
+            <p style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f5f5f5', border: '1px solid #ddd' }}>
+              <strong>받는 곳:</strong> {DEFAULT_RECIPIENT_ADDRESS}
+            </p>
             <p style={{ marginTop: '10px', color: '#666' }}>* 본 내역서는 품질팀 입고 확인용입니다.</p>
           </div>
         </div>
@@ -2449,7 +2479,15 @@ export default function BranchDashboardPage() {
               <div className="packing-footer">
                 <p><strong>발송 법인:</strong> {session?.branchCode}</p>
                 <p><strong>발송 일자:</strong> {new Date().toLocaleDateString('ko-KR')}</p>
-                <p className="note">* 본 내역서는 품질팀 입고 확인용입니다.</p>
+                {(() => {
+                  const { recipient, address } = getRecipientAddress(item.model_name);
+                  return (
+                    <p className="recipient-box">
+                      <strong>받는 곳:</strong> {address} ({recipient})
+                    </p>
+                  );
+                })()}
+                <p className="note">* 본 내역서는 입고 확인용입니다.</p>
               </div>
             </div>
           ))}
@@ -2671,6 +2709,15 @@ export default function BranchDashboardPage() {
             font-style: italic;
             color: #888;
             margin-top: 5px;
+          }
+
+          .packing-footer .recipient-box {
+            margin-top: 8px;
+            padding: 8px 10px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            font-size: 10pt;
+            color: #333;
           }
 
           /* 자재 패킹리스트 (리스트 형태) */
