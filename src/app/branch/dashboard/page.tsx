@@ -174,6 +174,9 @@ export default function BranchDashboardPage() {
   const [showOverdueWarning, setShowOverdueWarning] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
 
+  // 인쇄 모드 상태
+  const [printMode, setPrintMode] = useState<'combined' | 'material' | 'product' | 'packing-material' | 'packing-product' | null>(null);
+
   // 투어 관련 상태
   const [activeTab, setActiveTab] = useState<string>('waiting');
   const [showDemoCollectModal, setShowDemoCollectModal] = useState(false);
@@ -491,10 +494,33 @@ export default function BranchDashboardPage() {
     setShowBulkCancelModal(false);
   };
 
-  // 인쇄
-  const handlePrint = () => {
-    window.print();
+  // 인쇄 (탭별)
+  const handlePrint = (mode: 'combined' | 'material' | 'product') => {
+    setPrintMode(mode);
+    setTimeout(() => {
+      window.print();
+      setPrintMode(null);
+    }, 100);
   };
+
+  // 발송 내역 출력 (택배 동봉용)
+  const handlePackingPrint = (type: 'material' | 'product') => {
+    setPrintMode(type === 'material' ? 'packing-material' : 'packing-product');
+    setTimeout(() => {
+      window.print();
+      setPrintMode(null);
+    }, 100);
+  };
+
+  // 선택된 자재 데이터 (발송대기)
+  const selectedMaterialItems = useMemo(() => {
+    return collectedData.filter(item => selectedItems.has(item.id));
+  }, [collectedData, selectedItems]);
+
+  // 선택된 제품 데이터 (발송대기)
+  const selectedProductItemsList = useMemo(() => {
+    return productCollectedData.filter(item => selectedProductItems.has(item.id));
+  }, [productCollectedData, selectedProductItems]);
 
   // 상태별 통계 (필터된 데이터 기준)
   const totalStats = useMemo(() => ({
@@ -730,9 +756,13 @@ export default function BranchDashboardPage() {
                 검색
               </Button>
               {isSearched && (
-                <Button variant="outline" onClick={handlePrint} className="print:hidden">
+                <Button
+                  variant="outline"
+                  onClick={() => handlePrint(mainTab === 'overview' ? 'combined' : mainTab === 'material' ? 'material' : 'product')}
+                  className="print:hidden"
+                >
                   <Printer className="h-4 w-4 mr-2" />
-                  인쇄
+                  {mainTab === 'overview' ? '통합 인쇄' : mainTab === 'material' ? '자재 인쇄' : '제품 인쇄'}
                 </Button>
               )}
             </div>
@@ -749,14 +779,23 @@ export default function BranchDashboardPage() {
 
       {/* 메인 탭 (통합/자재/제품) */}
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'overview' | 'material' | 'product')} className="print:hidden">
-        <TabsList className="grid w-full grid-cols-3 mb-4">
-          <TabsTrigger value="overview" className="text-base">
+        <TabsList className="grid w-full grid-cols-3 mb-4 h-14 p-1 bg-gray-100">
+          <TabsTrigger
+            value="overview"
+            className="text-base h-12 data-[state=active]:bg-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg font-semibold"
+          >
             📊 통합 현황
           </TabsTrigger>
-          <TabsTrigger value="material" className="text-base">
+          <TabsTrigger
+            value="material"
+            className="text-base h-12 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg font-semibold"
+          >
             🔧 자재 ({totalStats.total})
           </TabsTrigger>
-          <TabsTrigger value="product" className="text-base">
+          <TabsTrigger
+            value="product"
+            className="text-base h-12 data-[state=active]:bg-green-600 data-[state=active]:text-white data-[state=active]:shadow-lg font-semibold"
+          >
             📦 제품 ({productTotalStats.total})
           </TabsTrigger>
         </TabsList>
@@ -1147,6 +1186,14 @@ export default function BranchDashboardPage() {
                     <CardTitle>회수완료 목록 (발송 대기)</CardTitle>
                     {selectedItems.size > 0 && (
                       <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => handlePackingPrint('material')}
+                          className="bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100"
+                        >
+                          <Printer className="h-4 w-4 mr-2" />
+                          내역출력 ({selectedItems.size})
+                        </Button>
                         <Button onClick={() => setShowBulkShippingModal(true)}>
                           <TruckIcon className="h-4 w-4 mr-2" />
                           선택 일괄발송 ({selectedItems.size})
@@ -1510,6 +1557,14 @@ export default function BranchDashboardPage() {
                       <CardTitle>제품 발송대기 목록</CardTitle>
                       {selectedProductItems.size > 0 && (
                         <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => handlePackingPrint('product')}
+                            className="bg-green-50 border-green-300 text-green-700 hover:bg-green-100"
+                          >
+                            <Printer className="h-4 w-4 mr-2" />
+                            내역출력 ({selectedProductItems.size})
+                          </Button>
                           <Button onClick={() => setShowBulkProductShippingModal(true)}>
                             <TruckIcon className="h-4 w-4 mr-2" />
                             선택 일괄발송 ({selectedProductItems.size})
@@ -1905,243 +1960,501 @@ export default function BranchDashboardPage() {
         isDemoMode={true}
       />
 
-      {/* 인쇄용 전용 영역 */}
-      <div className="hidden print:block print-area">
-        <div className="print-header">
-          <h1>부품 회수 목록</h1>
-          <div className="print-meta">
-            <span>법인코드: {session?.branchCode}</span>
-            <span>검색기간: {appliedDateFrom} ~ {appliedDateTo}</span>
-            <span>출력일시: {new Date().toLocaleString('ko-KR')}</span>
+      {/* 인쇄용 전용 영역 - 통합 */}
+      {(printMode === 'combined' || printMode === null) && (
+        <div className="hidden print:block print-area">
+          <div className="print-header">
+            <h1>부품 회수 목록 (통합)</h1>
+            <div className="print-meta">
+              <span>법인코드: {session?.branchCode}</span>
+              <span>검색기간: {appliedDateFrom} ~ {appliedDateTo}</span>
+              <span>출력일시: {new Date().toLocaleString('ko-KR')}</span>
+            </div>
+            <div className="print-summary">
+              <span style={{ fontWeight: 'bold' }}>【자재】</span>
+              <span>대기: {searchStats.waiting}</span>
+              <span>완료: {searchStats.collected}</span>
+              <span>발송: {searchStats.shipped}</span>
+              <span style={{ marginLeft: '20px', fontWeight: 'bold' }}>【제품】</span>
+              <span>대기: {productTotalStats.waiting}</span>
+              <span>완료: {productTotalStats.collected}</span>
+              <span>발송: {productTotalStats.shipped}</span>
+            </div>
           </div>
-          <div className="print-summary">
-            <span style={{ fontWeight: 'bold' }}>【자재】</span>
-            <span>대기: {searchStats.waiting}</span>
-            <span>완료: {searchStats.collected}</span>
-            <span>발송: {searchStats.shipped}</span>
-            <span style={{ marginLeft: '20px', fontWeight: 'bold' }}>【제품】</span>
-            <span>대기: {productTotalStats.waiting}</span>
-            <span>완료: {productTotalStats.collected}</span>
-            <span>발송: {productTotalStats.shipped}</span>
-          </div>
-        </div>
 
-        {/* 회수대기 목록 - 기사별 */}
-        {waitingByTechnician.length > 0 && (
-          <div className="print-section">
-            <h2>■ 회수대기 목록</h2>
-            {waitingByTechnician.map(([techCode, items]) => (
-              <div key={techCode} className="print-group">
-                <h3>기사코드: {techCode} ({items.length}건)</h3>
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '15%' }}>요청번호</th>
-                      <th style={{ width: '15%' }}>처리시간</th>
-                      <th style={{ width: '15%' }}>모델명</th>
-                      <th style={{ width: '15%' }}>자재코드</th>
-                      <th style={{ width: '30%' }}>자재명</th>
-                      <th style={{ width: '10%' }}>수량</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => (
-                      <tr key={item.id}>
-                        <td>{item.request_number}</td>
-                        <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                        <td>{item.model_name}</td>
-                        <td>{item.material_code}</td>
-                        <td>{item.material_name}</td>
-                        <td>{item.output_quantity}</td>
+          {/* 자재 회수대기 목록 */}
+          {waitingByTechnician.length > 0 && (
+            <div className="print-section">
+              <h2>■ 자재 회수대기 목록</h2>
+              {waitingByTechnician.map(([techCode, items]) => (
+                <div key={techCode} className="print-group">
+                  <h3>기사코드: {techCode} ({items.length}건)</h3>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>요청번호</th>
+                        <th>처리시간</th>
+                        <th>모델명</th>
+                        <th>자재코드</th>
+                        <th>자재명</th>
+                        <th>수량</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
-        )}
+                    </thead>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr key={item.id}>
+                          <td>{item.request_number}</td>
+                          <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                          <td>{item.model_name}</td>
+                          <td>{item.material_code}</td>
+                          <td>{item.material_name}</td>
+                          <td>{item.output_quantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
 
-        {/* 회수완료 목록 */}
-        {collectedData.length > 0 && (
-          <div className="print-section">
-            <h2>■ 회수완료 목록 (발송대기)</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>요청번호</th>
-                  <th>처리시간</th>
-                  <th>기사코드</th>
-                  <th>자재코드</th>
-                  <th>자재명</th>
-                  <th>수량</th>
-                  <th>회수일시</th>
-                  <th>경과일</th>
-                </tr>
-              </thead>
-              <tbody>
-                {collectedData.map((item) => {
-                  const daysPassed = item.collected_at
-                    ? Math.floor((new Date().getTime() - new Date(item.collected_at).getTime()) / (1000 * 60 * 60 * 24))
-                    : 0;
-                  return (
+          {/* 자재 발송대기 목록 */}
+          {collectedData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 자재 발송대기 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>요청번호</th>
+                    <th>기사코드</th>
+                    <th>자재코드</th>
+                    <th>자재명</th>
+                    <th>수량</th>
+                    <th>회수일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {collectedData.map((item) => (
                     <tr key={item.id}>
                       <td>{item.request_number}</td>
-                      <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                       <td>{item.technician_code || '-'}</td>
                       <td>{item.material_code}</td>
                       <td>{item.material_name}</td>
                       <td>{item.output_quantity}</td>
                       <td>{item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                      <td>D+{daysPassed}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-        {/* 발송완료 목록 */}
-        {shippedData.length > 0 && (
+          {/* 제품 섹션 구분선 */}
+          {(productWaitingData.length > 0 || productCollectedData.length > 0) && (
+            <div className="print-section" style={{ borderTop: '3px double #333', paddingTop: '15px', marginTop: '20px' }}>
+              <h2 style={{ fontSize: '14pt' }}>【 제품 회수 목록 】</h2>
+            </div>
+          )}
+
+          {/* 제품 회수대기 목록 */}
+          {productWaitingData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 제품 회수대기 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>유형</th>
+                    <th>고객번호</th>
+                    <th>고객명</th>
+                    <th>모델명</th>
+                    <th>요청지점</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productWaitingData.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.recovery_type}</td>
+                      <td>{item.customer_number}</td>
+                      <td>{item.customer_name}</td>
+                      <td>{item.model_name}</td>
+                      <td>{item.request_branch}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* 제품 발송대기 목록 */}
+          {productCollectedData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 제품 발송대기 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>유형</th>
+                    <th>고객번호</th>
+                    <th>고객명</th>
+                    <th>모델명</th>
+                    <th>요청지점</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productCollectedData.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.recovery_type}</td>
+                      <td>{item.customer_number}</td>
+                      <td>{item.customer_name}</td>
+                      <td>{item.model_name}</td>
+                      <td>{item.request_branch}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 인쇄용 전용 영역 - 자재만 */}
+      {printMode === 'material' && (
+        <div className="hidden print:block print-area">
+          <div className="print-header">
+            <h1>🔧 자재 회수 목록</h1>
+            <div className="print-meta">
+              <span>법인코드: {session?.branchCode}</span>
+              <span>검색기간: {appliedDateFrom} ~ {appliedDateTo}</span>
+              <span>출력일시: {new Date().toLocaleString('ko-KR')}</span>
+            </div>
+            <div className="print-summary">
+              <span>회수대기: {searchStats.waiting}건</span>
+              <span>발송대기: {searchStats.collected}건</span>
+              <span>발송완료: {searchStats.shipped}건</span>
+            </div>
+          </div>
+
+          {waitingByTechnician.length > 0 && (
+            <div className="print-section">
+              <h2>■ 회수대기 목록</h2>
+              {waitingByTechnician.map(([techCode, items]) => (
+                <div key={techCode} className="print-group">
+                  <h3>기사코드: {techCode} ({items.length}건)</h3>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>요청번호</th>
+                        <th>처리시간</th>
+                        <th>모델명</th>
+                        <th>자재코드</th>
+                        <th>자재명</th>
+                        <th>수량</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr key={item.id}>
+                          <td>{item.request_number}</td>
+                          <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                          <td>{item.model_name}</td>
+                          <td>{item.material_code}</td>
+                          <td>{item.material_name}</td>
+                          <td>{item.output_quantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {collectedData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 발송대기 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>요청번호</th>
+                    <th>기사코드</th>
+                    <th>자재코드</th>
+                    <th>자재명</th>
+                    <th>수량</th>
+                    <th>회수일시</th>
+                    <th>경과일</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {collectedData.map((item) => {
+                    const daysPassed = item.collected_at
+                      ? Math.floor((new Date().getTime() - new Date(item.collected_at).getTime()) / (1000 * 60 * 60 * 24))
+                      : 0;
+                    return (
+                      <tr key={item.id}>
+                        <td>{item.request_number}</td>
+                        <td>{item.technician_code || '-'}</td>
+                        <td>{item.material_code}</td>
+                        <td>{item.material_name}</td>
+                        <td>{item.output_quantity}</td>
+                        <td>{item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                        <td>D+{daysPassed}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {shippedData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 발송완료 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>요청번호</th>
+                    <th>기사코드</th>
+                    <th>자재코드</th>
+                    <th>자재명</th>
+                    <th>운송회사</th>
+                    <th>송장번호</th>
+                    <th>발송일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shippedData.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.request_number}</td>
+                      <td>{item.technician_code || '-'}</td>
+                      <td>{item.material_code}</td>
+                      <td>{item.material_name}</td>
+                      <td>{item.carrier}</td>
+                      <td>{item.tracking_number}</td>
+                      <td>{item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 인쇄용 전용 영역 - 제품만 */}
+      {printMode === 'product' && (
+        <div className="hidden print:block print-area">
+          <div className="print-header">
+            <h1>📦 제품 회수 목록</h1>
+            <div className="print-meta">
+              <span>법인코드: {session?.branchCode}</span>
+              <span>검색기간: {appliedDateFrom} ~ {appliedDateTo}</span>
+              <span>출력일시: {new Date().toLocaleString('ko-KR')}</span>
+            </div>
+            <div className="print-summary">
+              <span>회수대기: {productTotalStats.waiting}건</span>
+              <span>발송대기: {productTotalStats.collected}건</span>
+              <span>발송완료: {productTotalStats.shipped}건</span>
+            </div>
+          </div>
+
+          {productWaitingData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 회수대기 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>유형</th>
+                    <th>고객번호</th>
+                    <th>고객명</th>
+                    <th>모델명</th>
+                    <th>요청지점</th>
+                    <th>해지요청일</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productWaitingData.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.recovery_type}</td>
+                      <td>{item.customer_number}</td>
+                      <td>{item.customer_name}</td>
+                      <td>{item.model_name}</td>
+                      <td>{item.request_branch}</td>
+                      <td>{item.termination_request_date}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {productCollectedData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 발송대기 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>유형</th>
+                    <th>고객번호</th>
+                    <th>고객명</th>
+                    <th>모델명</th>
+                    <th>요청지점</th>
+                    <th>회수일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productCollectedData.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.recovery_type}</td>
+                      <td>{item.customer_number}</td>
+                      <td>{item.customer_name}</td>
+                      <td>{item.model_name}</td>
+                      <td>{item.request_branch}</td>
+                      <td>{item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {productShippedData.length > 0 && (
+            <div className="print-section">
+              <h2>■ 발송완료 목록</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>유형</th>
+                    <th>고객번호</th>
+                    <th>고객명</th>
+                    <th>모델명</th>
+                    <th>운송회사</th>
+                    <th>송장번호</th>
+                    <th>발송일시</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productShippedData.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.recovery_type}</td>
+                      <td>{item.customer_number}</td>
+                      <td>{item.customer_name}</td>
+                      <td>{item.model_name}</td>
+                      <td>{item.carrier}</td>
+                      <td>{item.tracking_number}</td>
+                      <td>{item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 인쇄용 - 자재 발송 내역 (택배 동봉용) */}
+      {printMode === 'packing-material' && (
+        <div className="hidden print:block print-area">
+          <div className="print-header">
+            <h1>📦 자재 발송 내역서</h1>
+            <div className="print-meta">
+              <span>법인코드: {session?.branchCode}</span>
+              <span>출력일시: {new Date().toLocaleString('ko-KR')}</span>
+              <span>총 {selectedMaterialItems.length}건</span>
+            </div>
+          </div>
           <div className="print-section">
-            <h2>■ 발송완료 목록</h2>
             <table>
               <thead>
                 <tr>
-                  <th>요청번호</th>
-                  <th>처리시간</th>
-                  <th>기사코드</th>
-                  <th>자재코드</th>
-                  <th>자재명</th>
-                  <th>운송회사</th>
-                  <th>송장번호</th>
-                  <th>발송일시</th>
+                  <th style={{ width: '5%' }}>No.</th>
+                  <th style={{ width: '15%' }}>요청번호</th>
+                  <th style={{ width: '10%' }}>기사코드</th>
+                  <th style={{ width: '15%' }}>자재코드</th>
+                  <th style={{ width: '35%' }}>자재명</th>
+                  <th style={{ width: '10%' }}>수량</th>
+                  <th style={{ width: '10%' }}>회수일</th>
                 </tr>
               </thead>
               <tbody>
-                {shippedData.map((item) => (
+                {selectedMaterialItems.map((item, idx) => (
                   <tr key={item.id}>
+                    <td style={{ textAlign: 'center' }}>{idx + 1}</td>
                     <td>{item.request_number}</td>
-                    <td>{item.process_time ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                     <td>{item.technician_code || '-'}</td>
                     <td>{item.material_code}</td>
                     <td>{item.material_name}</td>
-                    <td>{item.carrier}</td>
-                    <td>{item.tracking_number}</td>
-                    <td>{item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                    <td style={{ textAlign: 'center' }}>{item.output_quantity}</td>
+                    <td>{item.collected_at ? new Date(item.collected_at).toLocaleDateString('ko-KR') : '-'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        )}
+          <div style={{ marginTop: '30px', borderTop: '1px dashed #999', paddingTop: '15px', fontSize: '10pt' }}>
+            <p><strong>발송 법인:</strong> {session?.branchCode}</p>
+            <p><strong>발송 일자:</strong> {new Date().toLocaleDateString('ko-KR')}</p>
+            <p style={{ marginTop: '10px', color: '#666' }}>* 본 내역서는 품질팀 입고 확인용입니다.</p>
+          </div>
+        </div>
+      )}
 
-        {/* 제품 섹션 구분선 */}
-        {(productWaitingData.length > 0 || productCollectedData.length > 0 || productShippedData.length > 0) && (
-          <div className="print-section" style={{ borderTop: '3px double #333', paddingTop: '15px', marginTop: '20px' }}>
-            <h2 style={{ fontSize: '14pt' }}>【 제품 회수 목록 】</h2>
-            <div style={{ fontSize: '9pt', marginBottom: '10px' }}>
-              회수대기: {productWaitingData.length}건 | 발송대기: {productCollectedData.length}건 | 발송완료: {productShippedData.length}건
+      {/* 인쇄용 - 제품 발송 내역 (택배 동봉용, 1건씩 페이지 나눔) */}
+      {printMode === 'packing-product' && (
+        <div className="hidden print:block print-area">
+          {selectedProductItemsList.map((item, idx) => (
+            <div key={item.id} className="packing-slip">
+              <div className="packing-header">
+                <h1>📦 제품 회수 내역서</h1>
+                <div className="packing-no">{idx + 1} / {selectedProductItemsList.length}</div>
+              </div>
+
+              <div className="packing-content">
+                <table className="packing-table">
+                  <tbody>
+                    <tr>
+                      <th>회수 유형</th>
+                      <td>{item.recovery_type}</td>
+                    </tr>
+                    <tr>
+                      <th>고객번호</th>
+                      <td className="highlight">{item.customer_number}</td>
+                    </tr>
+                    <tr>
+                      <th>고객명</th>
+                      <td>{item.customer_name}</td>
+                    </tr>
+                    <tr>
+                      <th>모델명</th>
+                      <td className="highlight">{item.model_name}</td>
+                    </tr>
+                    <tr>
+                      <th>요청지점</th>
+                      <td>{item.request_branch}</td>
+                    </tr>
+                    <tr>
+                      <th>해지요청일</th>
+                      <td>{item.termination_request_date}</td>
+                    </tr>
+                    <tr>
+                      <th>계약일</th>
+                      <td>{item.contract_date || '-'}</td>
+                    </tr>
+                    <tr>
+                      <th>회수일시</th>
+                      <td>{item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR') : '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="packing-footer">
+                <p><strong>발송 법인:</strong> {session?.branchCode}</p>
+                <p><strong>발송 일자:</strong> {new Date().toLocaleDateString('ko-KR')}</p>
+                <p className="note">* 본 내역서는 품질팀 입고 확인용입니다.</p>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* 제품 회수대기 목록 */}
-        {productWaitingData.length > 0 && (
-          <div className="print-section">
-            <h2>■ 제품 회수대기 목록</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>유형</th>
-                  <th>고객번호</th>
-                  <th>고객명</th>
-                  <th>모델명</th>
-                  <th>요청지점</th>
-                  <th>해지요청일</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productWaitingData.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.recovery_type}</td>
-                    <td>{item.customer_number}</td>
-                    <td>{item.customer_name}</td>
-                    <td>{item.model_name}</td>
-                    <td>{item.request_branch}</td>
-                    <td>{item.termination_request_date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* 제품 발송대기 목록 */}
-        {productCollectedData.length > 0 && (
-          <div className="print-section">
-            <h2>■ 제품 발송대기 목록</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>유형</th>
-                  <th>고객번호</th>
-                  <th>고객명</th>
-                  <th>모델명</th>
-                  <th>요청지점</th>
-                  <th>회수일시</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productCollectedData.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.recovery_type}</td>
-                    <td>{item.customer_number}</td>
-                    <td>{item.customer_name}</td>
-                    <td>{item.model_name}</td>
-                    <td>{item.request_branch}</td>
-                    <td>{item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* 제품 발송완료 목록 */}
-        {productShippedData.length > 0 && (
-          <div className="print-section">
-            <h2>■ 제품 발송완료 목록</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>유형</th>
-                  <th>고객번호</th>
-                  <th>고객명</th>
-                  <th>모델명</th>
-                  <th>운송회사</th>
-                  <th>송장번호</th>
-                  <th>발송일시</th>
-                </tr>
-              </thead>
-              <tbody>
-                {productShippedData.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.recovery_type}</td>
-                    <td>{item.customer_number}</td>
-                    <td>{item.customer_name}</td>
-                    <td>{item.model_name}</td>
-                    <td>{item.carrier}</td>
-                    <td>{item.tracking_number}</td>
-                    <td>{item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* 온보딩 투어 */}
       <OnboardingTour
@@ -2265,6 +2578,123 @@ export default function BranchDashboardPage() {
           @page {
             size: A4 landscape;
             margin: 10mm;
+          }
+
+          /* 패킹 슬립 스타일 (제품 1장씩 출력) */
+          .packing-slip {
+            page-break-after: always;
+            padding: 15mm;
+            min-height: 250mm;
+            display: flex;
+            flex-direction: column;
+          }
+
+          .packing-slip:last-child {
+            page-break-after: auto;
+          }
+
+          .packing-header {
+            text-align: center;
+            border-bottom: 3px solid #333;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+          }
+
+          .packing-header h1 {
+            font-size: 24pt;
+            font-weight: bold;
+            margin-bottom: 10px;
+          }
+
+          .packing-header .slip-type {
+            font-size: 14pt;
+            color: #666;
+            margin-bottom: 10px;
+          }
+
+          .packing-header .slip-date {
+            font-size: 11pt;
+            color: #888;
+          }
+
+          .packing-content {
+            flex: 1;
+            padding: 20px 0;
+          }
+
+          .packing-content .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px dashed #ccc;
+            font-size: 12pt;
+          }
+
+          .packing-content .info-row .label {
+            font-weight: bold;
+            color: #333;
+            min-width: 120px;
+          }
+
+          .packing-content .info-row .value {
+            text-align: right;
+            color: #000;
+          }
+
+          .packing-content .main-item {
+            font-size: 16pt;
+            font-weight: bold;
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            border: 2px solid #333;
+          }
+
+          .packing-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+          }
+
+          .packing-table th,
+          .packing-table td {
+            border: 1px solid #333;
+            padding: 10px;
+            text-align: center;
+            font-size: 11pt;
+          }
+
+          .packing-table th {
+            background: #e8e8e8;
+            font-weight: bold;
+          }
+
+          .packing-footer {
+            border-top: 2px solid #333;
+            padding-top: 15px;
+            margin-top: auto;
+            font-size: 10pt;
+            color: #666;
+          }
+
+          .packing-footer p {
+            margin: 5px 0;
+          }
+
+          .packing-footer .note {
+            font-style: italic;
+            color: #888;
+          }
+
+          /* 자재 패킹리스트 (리스트 형태) */
+          .packing-list-material .packing-table {
+            font-size: 10pt;
+          }
+
+          .packing-list-material .packing-table th,
+          .packing-list-material .packing-table td {
+            padding: 6px 8px;
           }
         }
 
