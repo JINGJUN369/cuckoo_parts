@@ -79,7 +79,7 @@ export default function LoginPage() {
               alt="CUCKOO"
               width={120}
               height={40}
-              className="object-contain"
+              className="object-contain grayscale"
               priority
             />
           </div>

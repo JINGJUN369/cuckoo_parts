@@ -20,7 +20,7 @@ export function BranchHeader() {
     <header className="bg-white border-b px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain" />
+          <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain grayscale" />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-lg">쿠쿠 회수관리 시스템</h1>
