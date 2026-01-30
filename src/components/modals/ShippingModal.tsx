@@ -28,6 +28,7 @@ interface ShippingModalProps {
   carriers: Carrier[];
   requestNumber: string;
   isBulk?: boolean;
+  isDemoMode?: boolean;
 }
 
 export function ShippingModal({
@@ -37,6 +38,7 @@ export function ShippingModal({
   carriers,
   requestNumber,
   isBulk = false,
+  isDemoMode = false,
 }: ShippingModalProps) {
   const [carrier, setCarrier] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -61,8 +63,16 @@ export function ShippingModal({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isBulk ? '일괄 발송 정보 입력' : '발송 정보 입력'}</DialogTitle>
+          <DialogTitle>
+            {isDemoMode && <span className="text-blue-600">[연습] </span>}
+            {isBulk ? '일괄 발송 정보 입력' : '발송 정보 입력'}
+          </DialogTitle>
           <DialogDescription>
+            {isDemoMode && (
+              <span className="block text-blue-600 font-medium mb-2">
+                📘 이것은 연습입니다. 실제 데이터에 영향을 주지 않습니다.
+              </span>
+            )}
             {isBulk
               ? `${requestNumber} - 동일한 운송회사와 송장번호로 발송됩니다.`
               : `요청번호 ${requestNumber}의 발송 정보를 입력해주세요.`
@@ -79,7 +89,7 @@ export function ShippingModal({
               </SelectTrigger>
               <SelectContent>
                 {carriers
-                  .filter((c) => c.is_active)
+                  .filter((c) => isDemoMode || c.is_active)
                   .map((c) => (
                     <SelectItem key={c.id} value={c.name}>
                       {c.name}

@@ -9,18 +9,24 @@ export interface TourStep {
   title: string;
   content: string;
   position?: 'top' | 'bottom' | 'left' | 'right';
+  action?: 'click-waiting-tab' | 'click-collected-tab' | 'demo-collect' | 'demo-ship'; // 자동 실행할 액션
+  isInteractive?: boolean; // 사용자가 직접 클릭해야 하는 단계인지
+  demoButtonText?: string; // 데모 버튼 텍스트
 }
 
 interface OnboardingTourProps {
   steps: TourStep[];
   storageKey: string; // localStorage key to track completion
   onComplete?: () => void;
+  onAction?: (action: string) => void; // 액션 실행 콜백
+  onDemoAction?: (action: string) => Promise<void>; // 데모 액션 콜백
 }
 
-export function OnboardingTour({ steps, storageKey, onComplete }: OnboardingTourProps) {
+export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemoAction }: OnboardingTourProps) {
   const [isActive, setIsActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   // Check if tour should show on mount
   // 10주(70일) 동안은 매번 표시
@@ -131,9 +137,38 @@ export function OnboardingTour({ steps, storageKey, onComplete }: OnboardingTour
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
-      setCurrentStep(prev => prev + 1);
+      const nextStep = steps[currentStep + 1];
+      // 다음 단계의 액션 실행 (탭 전환 등)
+      if (nextStep.action && onAction) {
+        onAction(nextStep.action);
+        // 탭 전환 후 DOM 업데이트 대기
+        setTimeout(() => {
+          setCurrentStep(prev => prev + 1);
+        }, 300);
+      } else {
+        setCurrentStep(prev => prev + 1);
+      }
     } else {
       handleComplete();
+    }
+  };
+
+  // 데모 액션 실행 (실제 데이터에 영향 없이 연습)
+  const handleDemoAction = async () => {
+    const step = steps[currentStep];
+    if (!step.action || !onDemoAction) return;
+
+    setIsDemoLoading(true);
+    try {
+      await onDemoAction(step.action);
+      // 데모 완료 후 자동으로 다음 단계로
+      setTimeout(() => {
+        handleNext();
+      }, 500);
+    } catch {
+      // 데모 실패 시 무시
+    } finally {
+      setIsDemoLoading(false);
     }
   };
 
@@ -306,6 +341,21 @@ export function OnboardingTour({ steps, storageKey, onComplete }: OnboardingTour
         {/* Content */}
         <h3 className="text-lg font-bold text-gray-900 mb-2">{step.title}</h3>
         <p className="text-sm text-gray-600 leading-relaxed mb-4">{step.content}</p>
+
+        {/* Interactive Demo Button */}
+        {step.isInteractive && onDemoAction && (
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-xs text-blue-600 mb-2">👆 아래 버튼을 눌러 연습해보세요!</p>
+            <Button
+              size="sm"
+              className="w-full bg-green-600 hover:bg-green-700"
+              onClick={handleDemoAction}
+              disabled={isDemoLoading}
+            >
+              {isDemoLoading ? '처리 중...' : step.demoButtonText || '연습하기'}
+            </Button>
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="flex items-center justify-between">

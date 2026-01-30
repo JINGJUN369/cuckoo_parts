@@ -31,39 +31,85 @@ import { useAuth } from '@/hooks/useAuth';
 import { MaterialUsage, Carrier } from '@/types';
 import { toast } from 'sonner';
 
-// 온보딩 투어 단계 정의
-const TOUR_STEPS: TourStep[] = [
-  {
-    target: '#tour-date-filter',
-    title: '조회 기간 선택',
-    content: '날짜를 선택하면 전체 데이터가 필터링됩니다. 빠른 선택 버튼으로 오늘, 1주일, 30일 등을 쉽게 선택할 수 있습니다.',
-    position: 'bottom',
-  },
-  {
-    target: '#tour-stat-cards',
-    title: '현황 카드',
-    content: '회수대기, 회수완료, 발송완료 건수를 한눈에 확인할 수 있습니다. 선택한 조회 기간의 데이터가 표시됩니다.',
-    position: 'bottom',
-  },
-  {
+// 온보딩 투어 단계 정의 (동적으로 생성)
+const createTourSteps = (hasWaitingData: boolean, hasCollectedData: boolean): TourStep[] => {
+  const steps: TourStep[] = [
+    {
+      target: '#tour-date-filter',
+      title: '1단계: 조회 기간 선택',
+      content: '먼저 조회할 기간을 선택하세요. 빠른 선택 버튼으로 오늘, 1주일, 30일 등을 쉽게 선택할 수 있습니다.',
+      position: 'bottom',
+    },
+    {
+      target: '#tour-stat-cards',
+      title: '2단계: 현황 확인',
+      content: '회수대기, 발송대기, 발송완료 건수를 한눈에 확인하세요. 발송대기가 빨갛게 표시되면 긴급 발송이 필요합니다!',
+      position: 'bottom',
+    },
+  ];
+
+  // 기사별 현황
+  steps.push({
     target: '#tour-technician-stats',
-    title: '기사별 회수 현황',
-    content: '담당 기사별 진행 상황을 확인하세요. 회수대기가 많은 기사는 빨간색으로 표시됩니다.',
+    title: '3단계: 기사별 현황',
+    content: '담당 기사별 진행 상황입니다. 회수대기가 많은 기사는 빨간색으로 표시됩니다.',
     position: 'bottom',
-  },
-  {
-    target: '#tour-tabs',
-    title: '상세 데이터 탭',
-    content: '회수대기/회수완료/발송완료 탭을 클릭하여 상세 목록을 확인하세요.',
+  });
+
+  // 회수대기 탭 이동
+  steps.push({
+    target: '#tour-tab-waiting',
+    title: '4단계: 회수대기 탭 이동',
+    content: '회수대기 목록을 확인하려면 이 탭을 클릭하세요. 자동으로 이동합니다!',
     position: 'top',
-  },
-  {
+    action: 'click-waiting-tab',
+  });
+
+  // 회수완료 버튼 설명 + 데모
+  steps.push({
     target: '#tour-action-info',
-    title: '부품 처리 방법',
-    content: '회수대기 목록에서 [회수완료] 버튼을 클릭하면 기사가 부품을 회수한 것으로 처리됩니다. 회수완료 목록에서 [발송] 버튼으로 품질팀에 발송하세요.',
+    title: '5단계: 회수완료 처리 연습',
+    content: hasWaitingData
+      ? '기사가 부품을 회수했다면 [회수완료] 버튼을 클릭합니다. 아래 버튼으로 직접 연습해보세요! (실제 데이터에 영향 없음)'
+      : '회수대기 건이 있으면 [회수완료] 버튼이 표시됩니다. 클릭하면 부품이 "발송대기" 상태로 변경됩니다.',
+    position: 'bottom',
+    isInteractive: true,
+    action: 'demo-collect',
+    demoButtonText: '🎯 회수완료 클릭 연습하기',
+  });
+
+  // 발송대기 탭 이동
+  steps.push({
+    target: '#tour-tab-collected',
+    title: '6단계: 발송대기 탭 이동',
+    content: '회수된 부품은 품질팀으로 발송해야 합니다. 발송대기 탭으로 이동합니다!',
     position: 'top',
-  },
-];
+    action: 'click-collected-tab',
+  });
+
+  // 발송 버튼 설명 + 송장번호 입력 데모
+  steps.push({
+    target: '#tour-collected-table',
+    title: '7단계: 발송 처리 연습',
+    content: hasCollectedData
+      ? '[발송] 버튼을 클릭하면 운송회사와 송장번호를 입력합니다. 아래 버튼으로 송장번호 입력을 연습해보세요!'
+      : '발송대기 건이 있으면 [발송] 버튼이 표시됩니다. 클릭하여 운송회사와 송장번호를 입력하세요.',
+    position: 'bottom',
+    isInteractive: true,
+    action: 'demo-ship',
+    demoButtonText: '📦 발송 & 송장번호 입력 연습하기',
+  });
+
+  // 마지막 단계
+  steps.push({
+    target: '#tour-stat-cards',
+    title: '🎉 가이드 완료!',
+    content: '축하합니다! 이제 부품 회수 관리를 시작할 준비가 되었습니다.\n\n✅ 회수대기 → 회수완료 → 발송 순서로 처리하세요.\n❓ 궁금하면 우측 상단 "가이드 다시보기"를 클릭하세요.',
+    position: 'bottom',
+  });
+
+  return steps;
+};
 
 const TOUR_STORAGE_KEY = 'branch-dashboard-tour-completed';
 
@@ -113,6 +159,11 @@ export default function BranchDashboardPage() {
   const [showBulkShippingModal, setShowBulkShippingModal] = useState(false);
   const [showOverdueWarning, setShowOverdueWarning] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
+
+  // 투어 관련 상태
+  const [activeTab, setActiveTab] = useState<string>('waiting');
+  const [showDemoCollectModal, setShowDemoCollectModal] = useState(false);
+  const [showDemoShippingModal, setShowDemoShippingModal] = useState(false);
 
   // 검색 상태
   const [searchDateFrom, setSearchDateFrom] = useState('');
@@ -268,6 +319,55 @@ export default function BranchDashboardPage() {
       setShowOverdueWarning(true);
     }
   }, [overdueItems]);
+
+  // 투어 단계 생성 (데이터에 따라 동적)
+  const tourSteps = useMemo(() => {
+    return createTourSteps(waitingData.length > 0, collectedData.length > 0);
+  }, [waitingData.length, collectedData.length]);
+
+  // 투어 액션 핸들러 (탭 전환)
+  const handleTourAction = useCallback((action: string) => {
+    if (action === 'click-waiting-tab') {
+      setActiveTab('waiting');
+    } else if (action === 'click-collected-tab') {
+      setActiveTab('collected');
+    }
+  }, []);
+
+  // 투어 데모 액션 핸들러 (연습 모드)
+  const handleDemoAction = useCallback(async (action: string) => {
+    return new Promise<void>((resolve) => {
+      if (action === 'demo-collect') {
+        setShowDemoCollectModal(true);
+        // 모달이 닫히면 resolve
+        const checkModal = setInterval(() => {
+          if (!showDemoCollectModal) {
+            clearInterval(checkModal);
+            resolve();
+          }
+        }, 100);
+        // 3초 후 자동 resolve (타임아웃)
+        setTimeout(() => {
+          clearInterval(checkModal);
+          resolve();
+        }, 3000);
+      } else if (action === 'demo-ship') {
+        setShowDemoShippingModal(true);
+        const checkModal = setInterval(() => {
+          if (!showDemoShippingModal) {
+            clearInterval(checkModal);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkModal);
+          resolve();
+        }, 3000);
+      } else {
+        resolve();
+      }
+    });
+  }, [showDemoCollectModal, showDemoShippingModal]);
 
   // 전체 선택
   const handleSelectAll = (checked: boolean) => {
@@ -628,13 +728,14 @@ export default function BranchDashboardPage() {
       {isSearched && (
         <>
           {/* 탭 */}
-          <Tabs defaultValue="waiting" id="tour-tabs">
+          <Tabs value={activeTab} onValueChange={setActiveTab} id="tour-tabs">
             <TabsList className="print:hidden h-auto p-1">
-              <TabsTrigger value="waiting" className="py-2">
+              <TabsTrigger value="waiting" className="py-2" id="tour-tab-waiting">
                 회수대기 ({searchStats.waiting})
               </TabsTrigger>
               <TabsTrigger
                 value="collected"
+                id="tour-tab-collected"
                 className={`py-2 relative ${
                   searchStats.collected > 0
                     ? 'bg-amber-100 text-amber-900 data-[state=active]:bg-amber-500 data-[state=active]:text-white font-bold'
@@ -730,7 +831,7 @@ export default function BranchDashboardPage() {
 
             {/* 회수완료 탭 */}
             <TabsContent value="collected">
-              <Card>
+              <Card id="tour-collected-table">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>회수완료 목록 (발송 대기)</CardTitle>
@@ -933,6 +1034,46 @@ export default function BranchDashboardPage() {
         isBulk={true}
       />
 
+      {/* 데모 회수완료 모달 */}
+      <ConfirmModal
+        isOpen={showDemoCollectModal}
+        onClose={() => setShowDemoCollectModal(false)}
+        onConfirm={() => {
+          toast.success('🎯 연습 완료! 실제로는 이렇게 회수완료 처리가 됩니다.');
+          setShowDemoCollectModal(false);
+        }}
+        title="[연습] 회수완료 처리"
+        description={
+          <div className="space-y-2">
+            <p className="text-blue-600 font-medium">📘 이것은 연습입니다 (실제 데이터에 영향 없음)</p>
+            <div className="bg-gray-50 p-3 rounded text-sm">
+              <p><strong>요청번호:</strong> DEMO-12345</p>
+              <p><strong>자재코드:</strong> PART-001</p>
+              <p><strong>자재명:</strong> 데모 부품</p>
+            </div>
+            <p className="text-gray-600">위 부품을 회수완료 처리하시겠습니까?</p>
+          </div>
+        }
+        confirmText="회수완료"
+      />
+
+      {/* 데모 발송 모달 */}
+      <ShippingModal
+        isOpen={showDemoShippingModal}
+        onClose={() => setShowDemoShippingModal(false)}
+        onConfirm={(carrier, trackingNumber) => {
+          toast.success(`🎯 연습 완료! 운송사: ${carrier}, 송장번호: ${trackingNumber}`);
+          setShowDemoShippingModal(false);
+        }}
+        carriers={[
+          { id: 'demo1', name: 'CJ대한통운', is_active: true },
+          { id: 'demo2', name: '롯데택배', is_active: true },
+          { id: 'demo3', name: '한진택배', is_active: true },
+        ]}
+        requestNumber="DEMO-12345 [연습]"
+        isDemoMode={true}
+      />
+
       {/* 인쇄용 전용 영역 */}
       <div className="hidden print:block print-area">
         <div className="print-header">
@@ -1063,9 +1204,11 @@ export default function BranchDashboardPage() {
 
       {/* 온보딩 투어 */}
       <OnboardingTour
-        steps={TOUR_STEPS}
+        steps={tourSteps}
         storageKey={TOUR_STORAGE_KEY}
         onComplete={() => toast.success('가이드를 완료했습니다!')}
+        onAction={handleTourAction}
+        onDemoAction={handleDemoAction}
       />
 
       {/* 인쇄용 스타일 */}
