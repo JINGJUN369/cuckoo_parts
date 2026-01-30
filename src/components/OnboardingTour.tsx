@@ -28,10 +28,10 @@ export function OnboardingTour({ steps, storageKey, onComplete }: OnboardingTour
     const storedData = localStorage.getItem(storageKey);
 
     if (!storedData) {
-      // 처음 방문 - 투어 시작
+      // 처음 방문 - 투어 시작 (데이터 로딩 대기를 위해 1.5초 딜레이)
       const timer = setTimeout(() => {
         setIsActive(true);
-      }, 500);
+      }, 1500);
       return () => clearTimeout(timer);
     }
 
@@ -50,14 +50,14 @@ export function OnboardingTour({ steps, storageKey, onComplete }: OnboardingTour
       if (daysPassed < 7) {
         const timer = setTimeout(() => {
           setIsActive(true);
-        }, 500);
+        }, 1500);
         return () => clearTimeout(timer);
       }
     } catch {
       // 파싱 실패 시 (이전 버전 데이터) - 투어 시작
       const timer = setTimeout(() => {
         setIsActive(true);
-      }, 500);
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [storageKey]);
@@ -70,23 +70,64 @@ export function OnboardingTour({ steps, storageKey, onComplete }: OnboardingTour
     const element = document.querySelector(step.target);
 
     if (element) {
-      const rect = element.getBoundingClientRect();
-      setTargetRect(rect);
-
-      // Scroll element into view if needed
+      // 먼저 스크롤하여 요소를 화면에 표시
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // 스크롤 애니메이션 완료 후 위치 업데이트
+      setTimeout(() => {
+        const rect = element.getBoundingClientRect();
+        setTargetRect(rect);
+      }, 300);
     } else {
       setTargetRect(null);
     }
   }, [isActive, currentStep, steps]);
 
+  // 스크롤/리사이즈 시 위치 재계산
   useEffect(() => {
-    updateTargetPosition();
+    if (!isActive) return;
 
-    // Update on resize
-    window.addEventListener('resize', updateTargetPosition);
-    return () => window.removeEventListener('resize', updateTargetPosition);
-  }, [updateTargetPosition]);
+    // 초기 위치 설정 (데이터 로딩 대기)
+    const initialTimer = setTimeout(() => {
+      updateTargetPosition();
+    }, 100);
+
+    // 스크롤 시 위치 업데이트
+    const handleScroll = () => {
+      if (!isActive || currentStep >= steps.length) return;
+      const step = steps[currentStep];
+      const element = document.querySelector(step.target);
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        setTargetRect(rect);
+      }
+    };
+
+    // 리사이즈 시 위치 업데이트
+    const handleResize = () => {
+      updateTargetPosition();
+    };
+
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      clearTimeout(initialTimer);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isActive, currentStep, steps, updateTargetPosition]);
+
+  // 단계 변경 시 위치 업데이트
+  useEffect(() => {
+    if (isActive) {
+      // 약간의 딜레이 후 위치 업데이트 (DOM 렌더링 대기)
+      const timer = setTimeout(() => {
+        updateTargetPosition();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStep, isActive, updateTargetPosition]);
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
