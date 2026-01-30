@@ -28,8 +28,9 @@ import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { CancelShippingModal } from '@/components/modals/CancelShippingModal';
 import { OnboardingTour, RestartTourButton, TourStep } from '@/components/OnboardingTour';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
+import { useProductRecovery } from '@/hooks/useProductRecovery';
 import { useAuth } from '@/hooks/useAuth';
-import { MaterialUsage, Carrier, CancelReason } from '@/types';
+import { MaterialUsage, Carrier, CancelReason, ProductRecovery, ProductRecoveryStatus } from '@/types';
 import { toast } from 'sonner';
 
 // 온보딩 투어 단계 정의 (동적으로 생성)
@@ -153,13 +154,23 @@ function getDateRange(preset: DatePreset): { from: string; to: string } {
 }
 
 export default function BranchDashboardPage() {
+  // 메인 탭 상태 (통합/자재/제품)
+  const [mainTab, setMainTab] = useState<'overview' | 'material' | 'product'>('material');
+
   const [selectedItem, setSelectedItem] = useState<MaterialUsage | null>(null);
+  const [selectedProductItem, setSelectedProductItem] = useState<ProductRecovery | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectedProductItems, setSelectedProductItems] = useState<Set<string>>(new Set());
   const [showCollectModal, setShowCollectModal] = useState(false);
+  const [showProductCollectModal, setShowProductCollectModal] = useState(false);
   const [showShippingModal, setShowShippingModal] = useState(false);
+  const [showProductShippingModal, setShowProductShippingModal] = useState(false);
   const [showBulkShippingModal, setShowBulkShippingModal] = useState(false);
+  const [showBulkProductShippingModal, setShowBulkProductShippingModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showProductCancelModal, setShowProductCancelModal] = useState(false);
   const [showBulkCancelModal, setShowBulkCancelModal] = useState(false);
+  const [showBulkProductCancelModal, setShowBulkProductCancelModal] = useState(false);
   const [showOverdueWarning, setShowOverdueWarning] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
 
@@ -178,6 +189,11 @@ export default function BranchDashboardPage() {
   const [selectedPreset, setSelectedPreset] = useState<DatePreset | null>('last30days');
 
   const { getByBranch, updateStatus, updateStatusBulk, getCarriers } = useMaterialUsage();
+  const {
+    getByBranch: getProductByBranch,
+    updateStatus: updateProductStatus,
+    getCarriers: getProductCarriers
+  } = useProductRecovery();
   const { session } = useAuth();
 
   // 운송회사 목록 로드
@@ -201,11 +217,17 @@ export default function BranchDashboardPage() {
     setIsSearched(true);
   }, []);
 
-  // 본인 법인 데이터
+  // 본인 법인 자재 데이터
   const branchData = useMemo(() => {
     if (!session?.branchCode) return [];
     return getByBranch(session.branchCode);
   }, [getByBranch, session]);
+
+  // 본인 법인 제품 데이터
+  const productBranchData = useMemo(() => {
+    if (!session?.branchCode) return [];
+    return getProductByBranch(session.branchCode);
+  }, [getProductByBranch, session]);
 
   // 날짜 프리셋 선택
   const handlePresetSelect = (preset: DatePreset) => {
@@ -222,7 +244,7 @@ export default function BranchDashboardPage() {
     setIsSearched(true);
   };
 
-  // 검색된 데이터 (날짜 필터 적용)
+  // 검색된 자재 데이터 (날짜 필터 적용)
   const searchedData = useMemo(() => {
     if (!isSearched) return [];
 
@@ -237,11 +259,32 @@ export default function BranchDashboardPage() {
     });
   }, [branchData, appliedDateFrom, appliedDateTo, isSearched]);
 
-  // 상태별 데이터
+  // 검색된 제품 데이터 (날짜 필터 적용)
+  const searchedProductData = useMemo(() => {
+    if (!isSearched) return [];
+
+    return productBranchData.filter(item => {
+      const itemDate = item.created_at;
+      if (itemDate) {
+        const itemDateOnly = itemDate.split('T')[0];
+        if (appliedDateFrom && itemDateOnly < appliedDateFrom) return false;
+        if (appliedDateTo && itemDateOnly > appliedDateTo) return false;
+      }
+      return true;
+    });
+  }, [productBranchData, appliedDateFrom, appliedDateTo, isSearched]);
+
+  // 자재 상태별 데이터
   const waitingData = useMemo(() => searchedData.filter((item) => item.status === '회수대기'), [searchedData]);
   const collectedData = useMemo(() => searchedData.filter((item) => item.status === '회수완료'), [searchedData]);
   const shippedData = useMemo(() => searchedData.filter((item) => item.status === '발송'), [searchedData]);
   const cancelledData = useMemo(() => searchedData.filter((item) => item.status === '발송불가'), [searchedData]);
+
+  // 제품 상태별 데이터
+  const productWaitingData = useMemo(() => searchedProductData.filter((item) => item.recovery_status === '회수대기'), [searchedProductData]);
+  const productCollectedData = useMemo(() => searchedProductData.filter((item) => item.recovery_status === '회수완료'), [searchedProductData]);
+  const productShippedData = useMemo(() => searchedProductData.filter((item) => item.recovery_status === '발송'), [searchedProductData]);
+  const productCancelledData = useMemo(() => searchedProductData.filter((item) => item.recovery_status === '발송불가'), [searchedProductData]);
 
   // 기사코드별 회수대기 그룹화
   const waitingByTechnician = useMemo(() => {
@@ -472,6 +515,120 @@ export default function BranchDashboardPage() {
     overdue: overdueItems.length,
   }), [searchedData, waitingData, collectedData, shippedData, cancelledData, overdueItems]);
 
+  // 제품 통계
+  const productTotalStats = useMemo(() => ({
+    total: searchedProductData.length,
+    waiting: productWaitingData.length,
+    collected: productCollectedData.length,
+    shipped: productShippedData.length,
+    cancelled: productCancelledData.length,
+  }), [searchedProductData, productWaitingData, productCollectedData, productShippedData, productCancelledData]);
+
+  // 통합 통계
+  const combinedStats = useMemo(() => ({
+    total: totalStats.total + productTotalStats.total,
+    waiting: totalStats.waiting + productTotalStats.waiting,
+    collected: totalStats.collected + productTotalStats.collected,
+    shipped: totalStats.shipped + productTotalStats.shipped,
+    cancelled: totalStats.cancelled + productTotalStats.cancelled,
+  }), [totalStats, productTotalStats]);
+
+  // 제품 전체 선택
+  const handleProductSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedProductItems(new Set(productCollectedData.map(item => item.id)));
+    } else {
+      setSelectedProductItems(new Set());
+    }
+  };
+
+  // 제품 개별 선택
+  const handleProductSelectItem = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedProductItems);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedProductItems(newSelected);
+  };
+
+  // 제품 회수완료 처리
+  const handleProductCollect = async () => {
+    if (!selectedProductItem || !session) return;
+
+    try {
+      await updateProductStatus(selectedProductItem.id, '회수완료', session.userCode);
+      toast.success('회수완료 처리되었습니다.');
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
+    setShowProductCollectModal(false);
+    setSelectedProductItem(null);
+  };
+
+  // 제품 단건 발송 처리
+  const handleProductShip = async (carrier: string, trackingNumber: string) => {
+    if (!selectedProductItem || !session) return;
+
+    try {
+      await updateProductStatus(selectedProductItem.id, '발송', session.userCode, { carrier, tracking_number: trackingNumber });
+      toast.success('발송 처리되었습니다.');
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
+    setShowProductShippingModal(false);
+    setSelectedProductItem(null);
+  };
+
+  // 제품 일괄 발송 처리
+  const handleBulkProductShip = async (carrier: string, trackingNumber: string) => {
+    if (selectedProductItems.size === 0 || !session) return;
+
+    try {
+      const ids = Array.from(selectedProductItems);
+      for (const id of ids) {
+        await updateProductStatus(id, '발송', session.userCode, { carrier, tracking_number: trackingNumber });
+      }
+      toast.success(`${ids.length}건이 일괄 발송 처리되었습니다.`);
+      setSelectedProductItems(new Set());
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
+    setShowBulkProductShippingModal(false);
+  };
+
+  // 제품 단건 발송불가 처리
+  const handleProductCancel = async (reason: CancelReason, detail?: string) => {
+    if (!selectedProductItem || !session) return;
+
+    try {
+      await updateProductStatus(selectedProductItem.id, '발송불가', session.userCode, { cancel_reason: reason, cancel_reason_detail: detail });
+      toast.success('발송불가 처리되었습니다.');
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
+    setShowProductCancelModal(false);
+    setSelectedProductItem(null);
+  };
+
+  // 제품 일괄 발송불가 처리
+  const handleBulkProductCancel = async (reason: CancelReason, detail?: string) => {
+    if (selectedProductItems.size === 0 || !session) return;
+
+    try {
+      const ids = Array.from(selectedProductItems);
+      for (const id of ids) {
+        await updateProductStatus(id, '발송불가', session.userCode, { cancel_reason: reason, cancel_reason_detail: detail });
+      }
+      toast.success(`${ids.length}건이 발송불가 처리되었습니다.`);
+      setSelectedProductItems(new Set());
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
+    setShowBulkProductCancelModal(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* 헤더 */}
@@ -590,20 +747,146 @@ export default function BranchDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* 발송 필요 알림 (경과일별) */}
-      {collectedData.length > 0 && showOverdueWarning && (
-        <div className="space-y-2">
-          {/* 6일 이상 - 긴급 */}
-          {urgencyStats.day6plus.length > 0 && (
-            <Alert variant="destructive" className="border-2 animate-pulse">
-              <AlertTriangle className="h-5 w-5" />
-              <AlertTitle className="text-base font-bold">🚨 긴급 발송 필요!</AlertTitle>
-              <AlertDescription className="text-sm">
-                회수 후 <strong>6일 이상</strong> 경과한 부품이 <strong className="text-lg">{urgencyStats.day6plus.length}건</strong> 있습니다.
-                <span className="block mt-1 text-red-700 font-medium">오늘 중으로 발송해주세요!</span>
-              </AlertDescription>
-            </Alert>
-          )}
+      {/* 메인 탭 (통합/자재/제품) */}
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'overview' | 'material' | 'product')} className="print:hidden">
+        <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsTrigger value="overview" className="text-base">
+            📊 통합 현황
+          </TabsTrigger>
+          <TabsTrigger value="material" className="text-base">
+            🔧 자재 ({totalStats.total})
+          </TabsTrigger>
+          <TabsTrigger value="product" className="text-base">
+            📦 제품 ({productTotalStats.total})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* 통합 탭 */}
+        <TabsContent value="overview" className="space-y-6">
+          {/* 통합 현황 통계 */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <StatCard
+              title="전체 회수대상"
+              value={combinedStats.total.toLocaleString()}
+              icon={Package}
+              description={`자재 ${totalStats.total} + 제품 ${productTotalStats.total}`}
+            />
+            <StatCard
+              title="회수대기"
+              value={combinedStats.waiting.toLocaleString()}
+              icon={Clock}
+              className="border-l-4 border-l-red-500"
+              description={`자재 ${totalStats.waiting} + 제품 ${productTotalStats.waiting}`}
+            />
+            <StatCard
+              title="발송대기"
+              value={combinedStats.collected.toLocaleString()}
+              icon={CheckCircle2}
+              className="border-l-4 border-l-amber-500"
+              description={`자재 ${totalStats.collected} + 제품 ${productTotalStats.collected}`}
+            />
+            <StatCard
+              title="발송완료"
+              value={combinedStats.shipped.toLocaleString()}
+              icon={TruckIcon}
+              className="border-l-4 border-l-blue-500"
+              description={`자재 ${totalStats.shipped} + 제품 ${productTotalStats.shipped}`}
+            />
+            <StatCard
+              title="발송불가"
+              value={combinedStats.cancelled.toLocaleString()}
+              icon={XCircle}
+              className="border-l-4 border-l-gray-500"
+              description={`자재 ${totalStats.cancelled} + 제품 ${productTotalStats.cancelled}`}
+            />
+          </div>
+
+          {/* 유형별 비교 카드 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">🔧 자재 현황</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">회수대기</span>
+                    <span className="font-medium text-red-600">{totalStats.waiting}건</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">발송대기</span>
+                    <span className="font-medium text-amber-600">{totalStats.collected}건</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">발송완료</span>
+                    <span className="font-medium text-blue-600">{totalStats.shipped}건</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">발송불가</span>
+                    <span className="font-medium text-gray-600">{totalStats.cancelled}건</span>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full mt-4"
+                  onClick={() => setMainTab('material')}
+                >
+                  자재 상세보기
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">📦 제품 현황</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">회수대기</span>
+                    <span className="font-medium text-red-600">{productTotalStats.waiting}건</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">발송대기</span>
+                    <span className="font-medium text-amber-600">{productTotalStats.collected}건</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">발송완료</span>
+                    <span className="font-medium text-blue-600">{productTotalStats.shipped}건</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">발송불가</span>
+                    <span className="font-medium text-gray-600">{productTotalStats.cancelled}건</span>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full mt-4"
+                  onClick={() => setMainTab('product')}
+                >
+                  제품 상세보기
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* 자재 탭 */}
+        <TabsContent value="material" className="space-y-6">
+          {/* 발송 필요 알림 (경과일별) */}
+          {collectedData.length > 0 && showOverdueWarning && (
+            <div className="space-y-2">
+              {/* 6일 이상 - 긴급 */}
+              {urgencyStats.day6plus.length > 0 && (
+                <Alert variant="destructive" className="border-2 animate-pulse">
+                  <AlertTriangle className="h-5 w-5" />
+                  <AlertTitle className="text-base font-bold">🚨 긴급 발송 필요!</AlertTitle>
+                  <AlertDescription className="text-sm">
+                    회수 후 <strong>6일 이상</strong> 경과한 부품이 <strong className="text-lg">{urgencyStats.day6plus.length}건</strong> 있습니다.
+                    <span className="block mt-1 text-red-700 font-medium">오늘 중으로 발송해주세요!</span>
+                  </AlertDescription>
+                </Alert>
+              )}
 
           {/* 3~5일 경과 - 주의 */}
           {urgencyStats.day3to5.length > 0 && (
@@ -1097,7 +1380,7 @@ export default function BranchDashboardPage() {
         </>
       )}
 
-      {/* 검색 전 안내 */}
+      {/* 검색 전 안내 (자재) */}
       {!isSearched && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
@@ -1107,6 +1390,342 @@ export default function BranchDashboardPage() {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+
+        {/* 제품 탭 */}
+        <TabsContent value="product" className="space-y-6">
+          {/* 제품 현황 통계 */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <StatCard
+              title="전체 제품"
+              value={productTotalStats.total.toLocaleString()}
+              icon={Package}
+            />
+            <StatCard
+              title="회수대기"
+              value={productTotalStats.waiting.toLocaleString()}
+              icon={Clock}
+              className="border-l-4 border-l-red-500"
+            />
+            <StatCard
+              title="발송대기"
+              value={productTotalStats.collected.toLocaleString()}
+              icon={CheckCircle2}
+              className="border-l-4 border-l-amber-500"
+            />
+            <StatCard
+              title="발송완료"
+              value={productTotalStats.shipped.toLocaleString()}
+              icon={TruckIcon}
+              className="border-l-4 border-l-blue-500"
+            />
+            <StatCard
+              title="발송불가"
+              value={productTotalStats.cancelled.toLocaleString()}
+              icon={XCircle}
+              className="border-l-4 border-l-gray-500"
+            />
+          </div>
+
+          {/* 제품 데이터 탭 */}
+          {isSearched ? (
+            <Tabs defaultValue="product-waiting">
+              <TabsList className="h-auto p-1">
+                <TabsTrigger value="product-waiting" className="py-2">
+                  회수대기 ({productWaitingData.length})
+                </TabsTrigger>
+                <TabsTrigger value="product-collected" className="py-2">
+                  발송대기 ({productCollectedData.length})
+                </TabsTrigger>
+                <TabsTrigger value="product-shipped" className="py-2">
+                  발송완료 ({productShippedData.length})
+                </TabsTrigger>
+                <TabsTrigger value="product-cancelled" className="py-2 text-gray-600">
+                  발송불가 ({productCancelledData.length})
+                </TabsTrigger>
+              </TabsList>
+
+              {/* 제품 회수대기 */}
+              <TabsContent value="product-waiting">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>제품 회수대기 목록</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {productWaitingData.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>유형</TableHead>
+                            <TableHead>고객번호</TableHead>
+                            <TableHead>고객명</TableHead>
+                            <TableHead>모델명</TableHead>
+                            <TableHead>요청지점</TableHead>
+                            <TableHead>해지요청일</TableHead>
+                            <TableHead className="w-[100px] print:hidden">액션</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productWaitingData.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
+                                  {item.recovery_type}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
+                              <TableCell>{item.customer_name}</TableCell>
+                              <TableCell>{item.model_name}</TableCell>
+                              <TableCell className="text-sm">{item.request_branch}</TableCell>
+                              <TableCell className="text-sm">{item.termination_request_date}</TableCell>
+                              <TableCell className="print:hidden">
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedProductItem(item);
+                                    setShowProductCollectModal(true);
+                                  }}
+                                >
+                                  회수완료
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">
+                        해당 기간에 회수대기 건이 없습니다.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* 제품 발송대기 */}
+              <TabsContent value="product-collected">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>제품 발송대기 목록</CardTitle>
+                      {selectedProductItems.size > 0 && (
+                        <div className="flex gap-2">
+                          <Button onClick={() => setShowBulkProductShippingModal(true)}>
+                            <TruckIcon className="h-4 w-4 mr-2" />
+                            선택 일괄발송 ({selectedProductItems.size})
+                          </Button>
+                          <Button variant="destructive" onClick={() => setShowBulkProductCancelModal(true)}>
+                            <XCircle className="h-4 w-4 mr-2" />
+                            선택 발송불가 ({selectedProductItems.size})
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {productCollectedData.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[50px]">
+                              <Checkbox
+                                checked={productCollectedData.length > 0 && productCollectedData.every(item => selectedProductItems.has(item.id))}
+                                onCheckedChange={(checked) => handleProductSelectAll(!!checked)}
+                              />
+                            </TableHead>
+                            <TableHead>유형</TableHead>
+                            <TableHead>고객번호</TableHead>
+                            <TableHead>고객명</TableHead>
+                            <TableHead>모델명</TableHead>
+                            <TableHead>요청지점</TableHead>
+                            <TableHead>회수일시</TableHead>
+                            <TableHead className="w-[120px]">액션</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productCollectedData.map((item) => (
+                            <TableRow key={item.id} className={selectedProductItems.has(item.id) ? 'bg-blue-50' : ''}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedProductItems.has(item.id)}
+                                  onCheckedChange={(checked) => handleProductSelectItem(item.id, !!checked)}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
+                                  {item.recovery_type}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
+                              <TableCell>{item.customer_name}</TableCell>
+                              <TableCell>{item.model_name}</TableCell>
+                              <TableCell className="text-sm">{item.request_branch}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedProductItem(item);
+                                      setShowProductShippingModal(true);
+                                    }}
+                                  >
+                                    발송
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => {
+                                      setSelectedProductItem(item);
+                                      setShowProductCancelModal(true);
+                                    }}
+                                  >
+                                    불가
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">
+                        해당 기간에 발송 대기 건이 없습니다.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* 제품 발송완료 */}
+              <TabsContent value="product-shipped">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>제품 발송완료 목록</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {productShippedData.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>유형</TableHead>
+                            <TableHead>고객번호</TableHead>
+                            <TableHead>고객명</TableHead>
+                            <TableHead>모델명</TableHead>
+                            <TableHead>운송회사</TableHead>
+                            <TableHead>송장번호</TableHead>
+                            <TableHead>발송일시</TableHead>
+                            <TableHead>상태</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productShippedData.map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
+                                  {item.recovery_type}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
+                              <TableCell>{item.customer_name}</TableCell>
+                              <TableCell>{item.model_name}</TableCell>
+                              <TableCell>{item.carrier}</TableCell>
+                              <TableCell>{item.tracking_number}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-blue-600 border-blue-600">
+                                  {item.recovery_status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">
+                        해당 기간에 발송 완료 건이 없습니다.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* 제품 발송불가 */}
+              <TabsContent value="product-cancelled">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>제품 발송불가 목록</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {productCancelledData.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>유형</TableHead>
+                            <TableHead>고객번호</TableHead>
+                            <TableHead>고객명</TableHead>
+                            <TableHead>모델명</TableHead>
+                            <TableHead>불가사유</TableHead>
+                            <TableHead>상세사유</TableHead>
+                            <TableHead>처리일시</TableHead>
+                            <TableHead>상태</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {productCancelledData.map((item) => (
+                            <TableRow key={item.id} className="bg-gray-50">
+                              <TableCell>
+                                <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
+                                  {item.recovery_type}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
+                              <TableCell>{item.customer_name}</TableCell>
+                              <TableCell>{item.model_name}</TableCell>
+                              <TableCell>
+                                <Badge variant="destructive">{item.cancel_reason || '-'}</Badge>
+                              </TableCell>
+                              <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
+                                {item.cancel_reason_detail || '-'}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {item.cancelled_at ? new Date(item.cancelled_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-gray-600 border-gray-600">
+                                  {item.recovery_status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">
+                        해당 기간에 발송불가 건이 없습니다.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">날짜를 선택하고 검색 버튼을 눌러주세요.</p>
+                <p className="text-sm mt-2">검색 결과가 표시됩니다.</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* 회수완료 확인 모달 */}
       <ConfirmModal
@@ -1163,6 +1782,63 @@ export default function BranchDashboardPage() {
         requestNumber=""
         isBulk={true}
         bulkCount={selectedItems.size}
+      />
+
+      {/* 제품 회수완료 확인 모달 */}
+      <ConfirmModal
+        isOpen={showProductCollectModal}
+        onClose={() => {
+          setShowProductCollectModal(false);
+          setSelectedProductItem(null);
+        }}
+        onConfirm={handleProductCollect}
+        title="제품 회수완료 처리"
+        description={`고객번호 ${selectedProductItem?.customer_number}의 제품을 회수완료 처리하시겠습니까?`}
+        confirmText="회수완료"
+      />
+
+      {/* 제품 단건 발송 모달 */}
+      <ShippingModal
+        isOpen={showProductShippingModal}
+        onClose={() => {
+          setShowProductShippingModal(false);
+          setSelectedProductItem(null);
+        }}
+        onConfirm={handleProductShip}
+        carriers={carriers}
+        requestNumber={`고객번호: ${selectedProductItem?.customer_number || ''}`}
+      />
+
+      {/* 제품 일괄 발송 모달 */}
+      <ShippingModal
+        isOpen={showBulkProductShippingModal}
+        onClose={() => setShowBulkProductShippingModal(false)}
+        onConfirm={handleBulkProductShip}
+        carriers={carriers}
+        requestNumber={`제품 일괄 발송 (${selectedProductItems.size}건)`}
+        isBulk={true}
+      />
+
+      {/* 제품 단건 발송불가 모달 */}
+      <CancelShippingModal
+        isOpen={showProductCancelModal}
+        onClose={() => {
+          setShowProductCancelModal(false);
+          setSelectedProductItem(null);
+        }}
+        onConfirm={handleProductCancel}
+        requestNumber={`고객번호: ${selectedProductItem?.customer_number || ''}`}
+        materialName={selectedProductItem?.model_name}
+      />
+
+      {/* 제품 일괄 발송불가 모달 */}
+      <CancelShippingModal
+        isOpen={showBulkProductCancelModal}
+        onClose={() => setShowBulkProductCancelModal(false)}
+        onConfirm={handleBulkProductCancel}
+        requestNumber=""
+        isBulk={true}
+        bulkCount={selectedProductItems.size}
       />
 
       {/* 데모 회수완료 모달 */}
@@ -1239,9 +1915,14 @@ export default function BranchDashboardPage() {
             <span>출력일시: {new Date().toLocaleString('ko-KR')}</span>
           </div>
           <div className="print-summary">
-            <span>회수대기: {searchStats.waiting}건</span>
-            <span>회수완료: {searchStats.collected}건</span>
-            <span>발송완료: {searchStats.shipped}건</span>
+            <span style={{ fontWeight: 'bold' }}>【자재】</span>
+            <span>대기: {searchStats.waiting}</span>
+            <span>완료: {searchStats.collected}</span>
+            <span>발송: {searchStats.shipped}</span>
+            <span style={{ marginLeft: '20px', fontWeight: 'bold' }}>【제품】</span>
+            <span>대기: {productTotalStats.waiting}</span>
+            <span>완료: {productTotalStats.collected}</span>
+            <span>발송: {productTotalStats.shipped}</span>
           </div>
         </div>
 
@@ -1346,6 +2027,111 @@ export default function BranchDashboardPage() {
                     <td>{item.technician_code || '-'}</td>
                     <td>{item.material_code}</td>
                     <td>{item.material_name}</td>
+                    <td>{item.carrier}</td>
+                    <td>{item.tracking_number}</td>
+                    <td>{item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 제품 섹션 구분선 */}
+        {(productWaitingData.length > 0 || productCollectedData.length > 0 || productShippedData.length > 0) && (
+          <div className="print-section" style={{ borderTop: '3px double #333', paddingTop: '15px', marginTop: '20px' }}>
+            <h2 style={{ fontSize: '14pt' }}>【 제품 회수 목록 】</h2>
+            <div style={{ fontSize: '9pt', marginBottom: '10px' }}>
+              회수대기: {productWaitingData.length}건 | 발송대기: {productCollectedData.length}건 | 발송완료: {productShippedData.length}건
+            </div>
+          </div>
+        )}
+
+        {/* 제품 회수대기 목록 */}
+        {productWaitingData.length > 0 && (
+          <div className="print-section">
+            <h2>■ 제품 회수대기 목록</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>유형</th>
+                  <th>고객번호</th>
+                  <th>고객명</th>
+                  <th>모델명</th>
+                  <th>요청지점</th>
+                  <th>해지요청일</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productWaitingData.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.recovery_type}</td>
+                    <td>{item.customer_number}</td>
+                    <td>{item.customer_name}</td>
+                    <td>{item.model_name}</td>
+                    <td>{item.request_branch}</td>
+                    <td>{item.termination_request_date}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 제품 발송대기 목록 */}
+        {productCollectedData.length > 0 && (
+          <div className="print-section">
+            <h2>■ 제품 발송대기 목록</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>유형</th>
+                  <th>고객번호</th>
+                  <th>고객명</th>
+                  <th>모델명</th>
+                  <th>요청지점</th>
+                  <th>회수일시</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productCollectedData.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.recovery_type}</td>
+                    <td>{item.customer_number}</td>
+                    <td>{item.customer_name}</td>
+                    <td>{item.model_name}</td>
+                    <td>{item.request_branch}</td>
+                    <td>{item.collected_at ? new Date(item.collected_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 제품 발송완료 목록 */}
+        {productShippedData.length > 0 && (
+          <div className="print-section">
+            <h2>■ 제품 발송완료 목록</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>유형</th>
+                  <th>고객번호</th>
+                  <th>고객명</th>
+                  <th>모델명</th>
+                  <th>운송회사</th>
+                  <th>송장번호</th>
+                  <th>발송일시</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productShippedData.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.recovery_type}</td>
+                    <td>{item.customer_number}</td>
+                    <td>{item.customer_name}</td>
+                    <td>{item.model_name}</td>
                     <td>{item.carrier}</td>
                     <td>{item.tracking_number}</td>
                     <td>{item.shipped_at ? new Date(item.shipped_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}</td>

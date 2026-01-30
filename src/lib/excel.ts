@@ -168,6 +168,20 @@ export function exportToExcel(
   XLSX.writeFile(workbook, `${fileName}_${dateStr}.xlsx`);
 }
 
+// 범용 데이터 내보내기 (제품 등)
+export function exportGenericToExcel(
+  data: Record<string, unknown>[],
+  fileName: string = 'export_data'
+): void {
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+  XLSX.writeFile(workbook, `${fileName}_${dateStr}.xlsx`);
+}
+
 // 중복 키 생성
 export function generateDuplicateKey(row: ParsedExcelRow): string {
   return `${row.request_number}_${row.branch_code}_${row.material_code}`;
