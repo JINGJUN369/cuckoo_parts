@@ -25,10 +25,47 @@ import { StatCard } from '@/components/common/StatCard';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { ShippingModal } from '@/components/modals/ShippingModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { OnboardingTour, RestartTourButton, TourStep } from '@/components/OnboardingTour';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
 import { useAuth } from '@/hooks/useAuth';
 import { MaterialUsage, Carrier } from '@/types';
 import { toast } from 'sonner';
+
+// 온보딩 투어 단계 정의
+const TOUR_STEPS: TourStep[] = [
+  {
+    target: '#tour-date-filter',
+    title: '조회 기간 선택',
+    content: '날짜를 선택하면 전체 데이터가 필터링됩니다. 빠른 선택 버튼으로 오늘, 1주일, 30일 등을 쉽게 선택할 수 있습니다.',
+    position: 'bottom',
+  },
+  {
+    target: '#tour-stat-cards',
+    title: '현황 카드',
+    content: '회수대기, 회수완료, 발송완료 건수를 한눈에 확인할 수 있습니다. 선택한 조회 기간의 데이터가 표시됩니다.',
+    position: 'bottom',
+  },
+  {
+    target: '#tour-technician-stats',
+    title: '기사별 회수 현황',
+    content: '담당 기사별 진행 상황을 확인하세요. 회수대기가 많은 기사는 빨간색으로 표시됩니다.',
+    position: 'bottom',
+  },
+  {
+    target: '#tour-tabs',
+    title: '상세 데이터 탭',
+    content: '회수대기/회수완료/발송완료 탭을 클릭하여 상세 목록을 확인하세요.',
+    position: 'top',
+  },
+  {
+    target: '#tour-action-info',
+    title: '부품 처리 방법',
+    content: '회수대기 목록에서 [회수완료] 버튼을 클릭하면 기사가 부품을 회수한 것으로 처리됩니다. 회수완료 목록에서 [발송] 버튼으로 품질팀에 발송하세요.',
+    position: 'top',
+  },
+];
+
+const TOUR_STORAGE_KEY = 'branch-dashboard-tour-completed';
 
 // 날짜 프리셋 타입
 type DatePreset = 'today' | 'yesterday' | 'week' | 'thisMonth' | 'lastMonth' | 'last30days';
@@ -300,13 +337,19 @@ export default function BranchDashboardPage() {
   return (
     <div className="space-y-6">
       {/* 헤더 */}
-      <div>
-        <h1 className="text-2xl font-bold">회수 관리 대시보드</h1>
-        <p className="text-muted-foreground">법인코드: {session?.branchCode}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">회수 관리 대시보드</h1>
+          <p className="text-muted-foreground">법인코드: {session?.branchCode}</p>
+        </div>
+        <RestartTourButton
+          storageKey={TOUR_STORAGE_KEY}
+          onRestart={() => {}}
+        />
       </div>
 
       {/* 날짜 검색 (최상단) */}
-      <Card>
+      <Card id="tour-date-filter">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Search className="h-4 w-4" />
@@ -429,7 +472,7 @@ export default function BranchDashboardPage() {
       )}
 
       {/* 현황 통계 (필터 적용) */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div id="tour-stat-cards" className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
           title="전체 회수대상"
           value={totalStats.total.toLocaleString()}
@@ -457,7 +500,7 @@ export default function BranchDashboardPage() {
 
       {/* 기사별 회수 현황 (필터 적용) */}
       {technicianStats.length > 0 && (
-        <Card>
+        <Card id="tour-technician-stats">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-4 w-4" />
@@ -507,7 +550,7 @@ export default function BranchDashboardPage() {
       {isSearched && (
         <>
           {/* 탭 */}
-          <Tabs defaultValue="waiting">
+          <Tabs defaultValue="waiting" id="tour-tabs">
             <TabsList className="print:hidden">
               <TabsTrigger value="waiting">
                 회수대기 ({searchStats.waiting})
@@ -525,7 +568,7 @@ export default function BranchDashboardPage() {
 
             {/* 회수대기 탭 - 기사별 그룹화 */}
             <TabsContent value="waiting">
-              <Card>
+              <Card id="tour-action-info">
                 <CardHeader>
                   <CardTitle>회수대기 목록 (기사별)</CardTitle>
                 </CardHeader>
@@ -922,6 +965,13 @@ export default function BranchDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* 온보딩 투어 */}
+      <OnboardingTour
+        steps={TOUR_STEPS}
+        storageKey={TOUR_STORAGE_KEY}
+        onComplete={() => toast.success('가이드를 완료했습니다!')}
+      />
 
       {/* 인쇄용 스타일 */}
       <style jsx global>{`
