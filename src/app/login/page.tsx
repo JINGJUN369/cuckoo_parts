@@ -72,7 +72,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center rounded-t-lg" style={{ backgroundColor: '#791015' }}>
+        <CardHeader className="text-center rounded-t-lg pt-8 pb-6" style={{ backgroundColor: '#791015' }}>
           <div className="flex justify-center mb-4">
             <Image
               src="/cuckoo-logo.png"
@@ -119,7 +119,7 @@ export default function LoginPage() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading || !userCode.trim() || !password.trim()}>
+            <Button type="submit" className="w-full text-white hover:opacity-90" style={{ backgroundColor: '#791015' }} disabled={isLoading || !userCode.trim() || !password.trim()}>
               {isLoading ? '로그인 중...' : '로그인'}
             </Button>
           </form>
