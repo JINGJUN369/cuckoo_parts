@@ -2,7 +2,10 @@
 export type UserType = 'admin_cs' | 'admin_quality' | 'branch';
 
 // 회수 상태 타입
-export type RecoveryStatus = '회수대기' | '회수완료' | '발송' | '입고완료';
+export type RecoveryStatus = '회수대기' | '회수완료' | '발송' | '입고완료' | '발송불가';
+
+// 발송불가 사유 타입
+export type CancelReason = '분실' | '파손' | '재사용' | '기타';
 
 // 세션 정보
 export interface UserSession {
@@ -50,6 +53,12 @@ export interface MaterialUsage {
   tracking_number?: string;
   received_at?: string;
   received_by?: string;
+
+  // 발송불가 관련
+  cancel_reason?: CancelReason;
+  cancel_reason_detail?: string;
+  cancelled_at?: string;
+  cancelled_by?: string;
 
   is_recovery_target: boolean;
   created_at: string;
@@ -163,6 +172,7 @@ export interface RecoveryStats {
   collected: number;
   shipped: number;
   received: number;
+  cancelled: number;
 }
 
 // 차트용 일자별 데이터
@@ -172,6 +182,7 @@ export interface DailyStats {
   collected: number;
   shipped: number;
   received: number;
+  cancelled: number;
 }
 
 // 차트용 자재별 데이터
@@ -188,4 +199,5 @@ export interface BranchStats {
   collected: number;
   shipped: number;
   received: number;
+  cancelled: number;
 }

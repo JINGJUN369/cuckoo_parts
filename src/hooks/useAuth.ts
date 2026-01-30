@@ -215,10 +215,14 @@ export function useAuth() {
       return { success: false, error: '권한이 없습니다.' };
     }
 
+    // 관리자 계정은 12345678로, 설치법인은 ID로 초기화
+    const isAdminAccount = AUTH_MAP[targetUserCode] !== undefined;
+    const newPassword = isAdminAccount ? ADMIN_DEFAULT_PASSWORD : targetUserCode;
+
     const { error } = await supabase
       .from('users')
       .update({
-        password_hash: targetUserCode, // 초기 비밀번호 = ID
+        password_hash: newPassword,
         is_default_password: true,
         updated_at: new Date().toISOString(),
       })

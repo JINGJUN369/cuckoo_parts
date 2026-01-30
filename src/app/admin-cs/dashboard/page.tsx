@@ -308,14 +308,17 @@ export default function AdminCSDashboardPage() {
     setSelectedPreset(null);
   };
 
-  // 법인 선택 시 날짜 프리셋 적용
+  // 법인 선택 시 날짜 프리셋 적용 (기본: 최근 30일)
   const handleSelectBranch = (branch: string) => {
     setSelectedBranch(branch);
-    const today = new Date().toISOString().split('T')[0];
-    setSearchDateFrom(today);
-    setSearchDateTo(today);
-    setIsSearched(false);
-    setBranchSelectedPreset('today');
+    const range = getDateRange('last30days');
+    setSearchDateFrom(range.from);
+    setSearchDateTo(range.to);
+    // 자동 검색 실행
+    setAppliedDateFrom(range.from);
+    setAppliedDateTo(range.to);
+    setIsSearched(true);
+    setBranchSelectedPreset('last30days');
   };
 
   // 법인 상세 날짜 프리셋 선택

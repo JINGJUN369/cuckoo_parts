@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { MaterialUsage, RecoveryStatus, ParsedExcelRow, RecoveryStats } from '@/types';
+import { MaterialUsage, RecoveryStatus, ParsedExcelRow, RecoveryStats, CancelReason } from '@/types';
 import { supabase, DEFAULT_CARRIERS } from '@/lib/supabase/client';
 import { generateDuplicateKey } from '@/lib/excel';
 
@@ -163,7 +163,7 @@ export function useMaterialUsage() {
       id: string,
       newStatus: RecoveryStatus,
       userCode: string,
-      additionalData?: { carrier?: string; tracking_number?: string }
+      additionalData?: { carrier?: string; tracking_number?: string; cancel_reason?: CancelReason; cancel_reason_detail?: string }
     ) => {
       const item = data.find((d) => d.id === id);
       if (!item) return;
@@ -188,6 +188,12 @@ export function useMaterialUsage() {
         case '입고완료':
           updateData.received_at = now;
           updateData.received_by = userCode;
+          break;
+        case '발송불가':
+          updateData.cancelled_at = now;
+          updateData.cancelled_by = userCode;
+          updateData.cancel_reason = additionalData?.cancel_reason;
+          updateData.cancel_reason_detail = additionalData?.cancel_reason_detail;
           break;
       }
 
@@ -230,7 +236,7 @@ export function useMaterialUsage() {
       ids: string[],
       newStatus: RecoveryStatus,
       userCode: string,
-      additionalData?: { carrier?: string; tracking_number?: string }
+      additionalData?: { carrier?: string; tracking_number?: string; cancel_reason?: CancelReason; cancel_reason_detail?: string }
     ) => {
       if (ids.length === 0) return;
 
@@ -254,6 +260,12 @@ export function useMaterialUsage() {
         case '입고완료':
           updateData.received_at = now;
           updateData.received_by = userCode;
+          break;
+        case '발송불가':
+          updateData.cancelled_at = now;
+          updateData.cancelled_by = userCode;
+          updateData.cancel_reason = additionalData?.cancel_reason;
+          updateData.cancel_reason_detail = additionalData?.cancel_reason_detail;
           break;
       }
 
@@ -329,6 +341,7 @@ export function useMaterialUsage() {
       collected: targets.filter((item) => item.status === '회수완료').length,
       shipped: targets.filter((item) => item.status === '발송').length,
       received: targets.filter((item) => item.status === '입고완료').length,
+      cancelled: targets.filter((item) => item.status === '발송불가').length,
     };
   }, [data]);
 

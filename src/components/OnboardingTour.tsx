@@ -159,16 +159,20 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
     if (!step.action || !onDemoAction) return;
 
     setIsDemoLoading(true);
+    // 데모 모달이 보이도록 투어를 임시로 숨김
+    setIsActive(false);
+
     try {
       await onDemoAction(step.action);
-      // 데모 완료 후 자동으로 다음 단계로
-      setTimeout(() => {
-        handleNext();
-      }, 500);
     } catch {
       // 데모 실패 시 무시
     } finally {
-      setIsDemoLoading(false);
+      // 데모 완료 후 투어 다시 표시하고 다음 단계로
+      setTimeout(() => {
+        setIsActive(true);
+        setIsDemoLoading(false);
+        handleNext();
+      }, 300);
     }
   };
 

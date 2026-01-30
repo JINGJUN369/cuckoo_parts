@@ -15,6 +15,7 @@ const STATUS_COLORS: Record<RecoveryStatus, string> = {
   '회수완료': 'bg-amber-500',
   '발송': 'bg-blue-500',
   '입고완료': 'bg-green-500',
+  '발송불가': 'bg-gray-500',
 };
 
 export default function CalendarPage() {

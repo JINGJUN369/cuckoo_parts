@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, useEffect, useCallback } from 'react';
-import { Package, Clock, TruckIcon, CheckCircle2, AlertTriangle, Search, Printer, Users } from 'lucide-react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { Package, Clock, TruckIcon, CheckCircle2, AlertTriangle, Search, Printer, Users, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,10 +25,11 @@ import { StatCard } from '@/components/common/StatCard';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { ShippingModal } from '@/components/modals/ShippingModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
+import { CancelShippingModal } from '@/components/modals/CancelShippingModal';
 import { OnboardingTour, RestartTourButton, TourStep } from '@/components/OnboardingTour';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
 import { useAuth } from '@/hooks/useAuth';
-import { MaterialUsage, Carrier } from '@/types';
+import { MaterialUsage, Carrier, CancelReason } from '@/types';
 import { toast } from 'sonner';
 
 // 온보딩 투어 단계 정의 (동적으로 생성)
@@ -157,6 +158,8 @@ export default function BranchDashboardPage() {
   const [showCollectModal, setShowCollectModal] = useState(false);
   const [showShippingModal, setShowShippingModal] = useState(false);
   const [showBulkShippingModal, setShowBulkShippingModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showBulkCancelModal, setShowBulkCancelModal] = useState(false);
   const [showOverdueWarning, setShowOverdueWarning] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
 
@@ -164,6 +167,7 @@ export default function BranchDashboardPage() {
   const [activeTab, setActiveTab] = useState<string>('waiting');
   const [showDemoCollectModal, setShowDemoCollectModal] = useState(false);
   const [showDemoShippingModal, setShowDemoShippingModal] = useState(false);
+  const demoResolveRef = useRef<(() => void) | null>(null);
 
   // 검색 상태
   const [searchDateFrom, setSearchDateFrom] = useState('');
@@ -237,6 +241,7 @@ export default function BranchDashboardPage() {
   const waitingData = useMemo(() => searchedData.filter((item) => item.status === '회수대기'), [searchedData]);
   const collectedData = useMemo(() => searchedData.filter((item) => item.status === '회수완료'), [searchedData]);
   const shippedData = useMemo(() => searchedData.filter((item) => item.status === '발송'), [searchedData]);
+  const cancelledData = useMemo(() => searchedData.filter((item) => item.status === '발송불가'), [searchedData]);
 
   // 기사코드별 회수대기 그룹화
   const waitingByTechnician = useMemo(() => {
@@ -337,37 +342,19 @@ export default function BranchDashboardPage() {
   // 투어 데모 액션 핸들러 (연습 모드)
   const handleDemoAction = useCallback(async (action: string) => {
     return new Promise<void>((resolve) => {
+      // resolve 함수를 ref에 저장하여 모달이 닫힐 때 호출
+      demoResolveRef.current = resolve;
+
       if (action === 'demo-collect') {
         setShowDemoCollectModal(true);
-        // 모달이 닫히면 resolve
-        const checkModal = setInterval(() => {
-          if (!showDemoCollectModal) {
-            clearInterval(checkModal);
-            resolve();
-          }
-        }, 100);
-        // 3초 후 자동 resolve (타임아웃)
-        setTimeout(() => {
-          clearInterval(checkModal);
-          resolve();
-        }, 3000);
       } else if (action === 'demo-ship') {
         setShowDemoShippingModal(true);
-        const checkModal = setInterval(() => {
-          if (!showDemoShippingModal) {
-            clearInterval(checkModal);
-            resolve();
-          }
-        }, 100);
-        setTimeout(() => {
-          clearInterval(checkModal);
-          resolve();
-        }, 3000);
       } else {
+        demoResolveRef.current = null;
         resolve();
       }
     });
-  }, [showDemoCollectModal, showDemoShippingModal]);
+  }, []);
 
   // 전체 선택
   const handleSelectAll = (checked: boolean) => {
@@ -432,6 +419,35 @@ export default function BranchDashboardPage() {
     setShowBulkShippingModal(false);
   };
 
+  // 단건 발송불가 처리
+  const handleCancel = async (reason: CancelReason, detail?: string) => {
+    if (!selectedItem || !session) return;
+
+    try {
+      await updateStatus(selectedItem.id, '발송불가', session.userCode, { cancel_reason: reason, cancel_reason_detail: detail });
+      toast.success('발송불가 처리되었습니다.');
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
+    setShowCancelModal(false);
+    setSelectedItem(null);
+  };
+
+  // 일괄 발송불가 처리
+  const handleBulkCancel = async (reason: CancelReason, detail?: string) => {
+    if (selectedItems.size === 0 || !session) return;
+
+    try {
+      const ids = Array.from(selectedItems);
+      await updateStatusBulk(ids, '발송불가', session.userCode, { cancel_reason: reason, cancel_reason_detail: detail });
+      toast.success(`${ids.length}건이 발송불가 처리되었습니다.`);
+      setSelectedItems(new Set());
+    } catch (error) {
+      toast.error('처리 중 오류가 발생했습니다.');
+    }
+    setShowBulkCancelModal(false);
+  };
+
   // 인쇄
   const handlePrint = () => {
     window.print();
@@ -443,7 +459,8 @@ export default function BranchDashboardPage() {
     waiting: waitingData.length,
     collected: collectedData.length,
     shipped: shippedData.length,
-  }), [searchedData, waitingData, collectedData, shippedData]);
+    cancelled: cancelledData.length,
+  }), [searchedData, waitingData, collectedData, shippedData, cancelledData]);
 
   // 검색 결과 통계
   const searchStats = useMemo(() => ({
@@ -451,8 +468,9 @@ export default function BranchDashboardPage() {
     waiting: waitingData.length,
     collected: collectedData.length,
     shipped: shippedData.length,
+    cancelled: cancelledData.length,
     overdue: overdueItems.length,
-  }), [searchedData, waitingData, collectedData, shippedData, overdueItems]);
+  }), [searchedData, waitingData, collectedData, shippedData, cancelledData, overdueItems]);
 
   return (
     <div className="space-y-6">
@@ -630,7 +648,7 @@ export default function BranchDashboardPage() {
       )}
 
       {/* 현황 통계 (필터 적용) */}
-      <div id="tour-stat-cards" className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div id="tour-stat-cards" className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <StatCard
           title="전체 회수대상"
           value={totalStats.total.toLocaleString()}
@@ -673,6 +691,12 @@ export default function BranchDashboardPage() {
           value={totalStats.shipped.toLocaleString()}
           icon={TruckIcon}
           className="border-l-4 border-l-blue-500"
+        />
+        <StatCard
+          title="발송불가"
+          value={totalStats.cancelled.toLocaleString()}
+          icon={XCircle}
+          className="border-l-4 border-l-gray-500"
         />
       </div>
 
@@ -760,6 +784,9 @@ export default function BranchDashboardPage() {
               <TabsTrigger value="shipped" className="py-2">
                 발송완료 ({searchStats.shipped})
               </TabsTrigger>
+              <TabsTrigger value="cancelled" className="py-2 text-gray-600">
+                발송불가 ({searchStats.cancelled})
+              </TabsTrigger>
             </TabsList>
 
             {/* 회수대기 탭 - 기사별 그룹화 */}
@@ -836,10 +863,16 @@ export default function BranchDashboardPage() {
                   <div className="flex items-center justify-between">
                     <CardTitle>회수완료 목록 (발송 대기)</CardTitle>
                     {selectedItems.size > 0 && (
-                      <Button onClick={() => setShowBulkShippingModal(true)}>
-                        <TruckIcon className="h-4 w-4 mr-2" />
-                        선택 일괄발송 ({selectedItems.size})
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button onClick={() => setShowBulkShippingModal(true)}>
+                          <TruckIcon className="h-4 w-4 mr-2" />
+                          선택 일괄발송 ({selectedItems.size})
+                        </Button>
+                        <Button variant="destructive" onClick={() => setShowBulkCancelModal(true)}>
+                          <XCircle className="h-4 w-4 mr-2" />
+                          선택 발송불가 ({selectedItems.size})
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </CardHeader>
@@ -901,16 +934,29 @@ export default function BranchDashboardPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setSelectedItem(item);
-                                    setShowShippingModal(true);
-                                  }}
-                                >
-                                  발송
-                                </Button>
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedItem(item);
+                                      setShowShippingModal(true);
+                                    }}
+                                  >
+                                    발송
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => {
+                                      setSelectedItem(item);
+                                      setShowCancelModal(true);
+                                    }}
+                                  >
+                                    불가
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           );
@@ -984,6 +1030,69 @@ export default function BranchDashboardPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* 발송불가 탭 */}
+            <TabsContent value="cancelled">
+              <Card>
+                <CardHeader>
+                  <CardTitle>발송불가 목록</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {cancelledData.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>요청번호</TableHead>
+                          <TableHead>처리시간</TableHead>
+                          <TableHead>기사코드</TableHead>
+                          <TableHead>자재코드</TableHead>
+                          <TableHead>자재명</TableHead>
+                          <TableHead>불가사유</TableHead>
+                          <TableHead>상세사유</TableHead>
+                          <TableHead>처리일시</TableHead>
+                          <TableHead>상태</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cancelledData.map((item) => (
+                          <TableRow key={item.id} className="bg-gray-50">
+                            <TableCell className="font-medium">{item.request_number}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {item.process_time
+                                ? new Date(item.process_time).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{item.technician_code || '-'}</Badge>
+                            </TableCell>
+                            <TableCell>{item.material_code}</TableCell>
+                            <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
+                            <TableCell>
+                              <Badge variant="destructive">{item.cancel_reason || '-'}</Badge>
+                            </TableCell>
+                            <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
+                              {item.cancel_reason_detail || '-'}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {item.cancelled_at
+                                ? new Date(item.cancelled_at).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={item.status} size="sm" />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-center py-8 text-muted-foreground">
+                      해당 기간에 발송불가 건이 없습니다.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </>
       )}
@@ -1034,13 +1143,47 @@ export default function BranchDashboardPage() {
         isBulk={true}
       />
 
+      {/* 단건 발송불가 모달 */}
+      <CancelShippingModal
+        isOpen={showCancelModal}
+        onClose={() => {
+          setShowCancelModal(false);
+          setSelectedItem(null);
+        }}
+        onConfirm={handleCancel}
+        requestNumber={selectedItem?.request_number || ''}
+        materialName={selectedItem?.material_name}
+      />
+
+      {/* 일괄 발송불가 모달 */}
+      <CancelShippingModal
+        isOpen={showBulkCancelModal}
+        onClose={() => setShowBulkCancelModal(false)}
+        onConfirm={handleBulkCancel}
+        requestNumber=""
+        isBulk={true}
+        bulkCount={selectedItems.size}
+      />
+
       {/* 데모 회수완료 모달 */}
       <ConfirmModal
         isOpen={showDemoCollectModal}
-        onClose={() => setShowDemoCollectModal(false)}
+        onClose={() => {
+          setShowDemoCollectModal(false);
+          // 모달이 닫히면 투어 재개
+          if (demoResolveRef.current) {
+            demoResolveRef.current();
+            demoResolveRef.current = null;
+          }
+        }}
         onConfirm={() => {
           toast.success('🎯 연습 완료! 실제로는 이렇게 회수완료 처리가 됩니다.');
           setShowDemoCollectModal(false);
+          // 모달이 닫히면 투어 재개
+          if (demoResolveRef.current) {
+            demoResolveRef.current();
+            demoResolveRef.current = null;
+          }
         }}
         title="[연습] 회수완료 처리"
         description={
@@ -1060,10 +1203,22 @@ export default function BranchDashboardPage() {
       {/* 데모 발송 모달 */}
       <ShippingModal
         isOpen={showDemoShippingModal}
-        onClose={() => setShowDemoShippingModal(false)}
+        onClose={() => {
+          setShowDemoShippingModal(false);
+          // 모달이 닫히면 투어 재개
+          if (demoResolveRef.current) {
+            demoResolveRef.current();
+            demoResolveRef.current = null;
+          }
+        }}
         onConfirm={(carrier, trackingNumber) => {
           toast.success(`🎯 연습 완료! 운송사: ${carrier}, 송장번호: ${trackingNumber}`);
           setShowDemoShippingModal(false);
+          // 모달이 닫히면 투어 재개
+          if (demoResolveRef.current) {
+            demoResolveRef.current();
+            demoResolveRef.current = null;
+          }
         }}
         carriers={[
           { id: 'demo1', name: 'CJ대한통운', is_active: true },
