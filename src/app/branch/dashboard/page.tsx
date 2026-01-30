@@ -779,22 +779,22 @@ export default function BranchDashboardPage() {
 
       {/* 메인 탭 (통합/자재/제품) */}
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'overview' | 'material' | 'product')} className="print:hidden">
-        <TabsList className="grid w-full grid-cols-3 mb-4 h-14 p-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+        <TabsList className="grid w-full grid-cols-3 mb-4 h-12 p-1 bg-slate-100 rounded-lg">
           <TabsTrigger
             value="overview"
-            className="text-base h-11 border-2 border-purple-300 bg-white text-purple-700 data-[state=active]:bg-purple-500 data-[state=active]:text-white data-[state=active]:border-purple-500 data-[state=active]:shadow-md font-semibold rounded-md transition-all"
+            className="text-sm h-10 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
           >
             📊 통합 현황
           </TabsTrigger>
           <TabsTrigger
             value="material"
-            className="text-base h-11 border-2 border-blue-300 bg-white text-blue-700 data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:border-blue-500 data-[state=active]:shadow-md font-semibold rounded-md transition-all"
+            className="text-sm h-10 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
           >
             🔧 자재 ({totalStats.total})
           </TabsTrigger>
           <TabsTrigger
             value="product"
-            className="text-base h-11 border-2 border-green-300 bg-white text-green-700 data-[state=active]:bg-green-500 data-[state=active]:text-white data-[state=active]:border-green-500 data-[state=active]:shadow-md font-semibold rounded-md transition-all"
+            className="text-sm h-10 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
           >
             📦 제품 ({productTotalStats.total})
           </TabsTrigger>
