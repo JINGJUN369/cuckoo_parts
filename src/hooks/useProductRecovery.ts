@@ -40,20 +40,22 @@ export function extractContractDate(customerNumber: string): Date | null {
 }
 
 // 사원번호에서 법인코드 추출 (SA01001 → SA01, 2202xxx → 2202)
-export function extractBranchCode(employeeNumber: string): string {
-  if (!employeeNumber) return '';
+export function extractBranchCode(employeeNumber: string | number | undefined | null): string {
+  // 숫자나 null/undefined도 처리할 수 있도록 문자열로 변환
+  const empStr = String(employeeNumber ?? '');
+  if (!empStr || empStr === 'undefined' || empStr === 'null') return '';
 
   // SA로 시작하면 앞 4자리
-  if (employeeNumber.startsWith('SA')) {
-    return employeeNumber.substring(0, 4);
+  if (empStr.startsWith('SA')) {
+    return empStr.substring(0, 4);
   }
 
   // 숫자로 시작하면 앞 4자리
-  if (/^\d/.test(employeeNumber)) {
-    return employeeNumber.substring(0, 4);
+  if (/^\d/.test(empStr)) {
+    return empStr.substring(0, 4);
   }
 
-  return employeeNumber.substring(0, 4);
+  return empStr.substring(0, 4);
 }
 
 // 1년 이내 여부 확인
