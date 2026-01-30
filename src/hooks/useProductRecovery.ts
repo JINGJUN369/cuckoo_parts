@@ -136,9 +136,9 @@ export function useProductRecovery() {
         skipped: 0,
       };
 
-      // 기존 데이터의 키 Set 생성 (고객번호 + 회수유형)
+      // 기존 데이터의 키 Set 생성 (고객번호 + 모델명 + 해지요청일)
       const existingKeys = new Set(
-        data.map(item => `${item.customer_number}_${item.recovery_type}`)
+        data.map(item => `${item.customer_number}_${item.model_name}_${item.termination_request_date}`)
       );
 
       const newItems: Omit<ProductRecovery, 'id'>[] = [];
@@ -151,13 +151,6 @@ export function useProductRecovery() {
         }
         result.approved++;
 
-        // 중복 체크
-        const key = `${row.customer_number}_철거`;
-        if (existingKeys.has(key)) {
-          result.duplicate++;
-          continue;
-        }
-
         // 계약일 추출
         const contractDate = extractContractDate(row.customer_number);
         if (!contractDate) {
@@ -167,6 +160,14 @@ export function useProductRecovery() {
 
         // 해지요청일
         const terminationDate = excelDateToJSDate(row.termination_request_date);
+        const terminationDateStr = terminationDate.toISOString().split('T')[0];
+
+        // 중복 체크 (고객번호 + 모델명 + 해지요청일)
+        const key = `${row.customer_number}_${row.model_name}_${terminationDateStr}`;
+        if (existingKeys.has(key)) {
+          result.duplicate++;
+          continue;
+        }
 
         // 법인코드 추출
         const branchCode = extractBranchCode(row.employee_number);
@@ -268,8 +269,9 @@ export function useProductRecovery() {
         skipped: 0,
       };
 
+      // 기존 데이터의 키 Set 생성 (고객번호 + 모델명 + 해지요청일)
       const existingKeys = new Set(
-        data.map(item => `${item.customer_number}_${item.recovery_type}`)
+        data.map(item => `${item.customer_number}_${item.model_name}_${item.termination_request_date}`)
       );
 
       const newItems: Omit<ProductRecovery, 'id'>[] = [];
@@ -281,12 +283,6 @@ export function useProductRecovery() {
         }
         result.approved++;
 
-        const key = `${row.customer_number}_불량교환`;
-        if (existingKeys.has(key)) {
-          result.duplicate++;
-          continue;
-        }
-
         const contractDate = extractContractDate(row.customer_number);
         if (!contractDate) {
           result.skipped++;
@@ -294,6 +290,14 @@ export function useProductRecovery() {
         }
 
         const terminationDate = excelDateToJSDate(row.termination_request_date);
+        const terminationDateStr = terminationDate.toISOString().split('T')[0];
+
+        // 중복 체크 (고객번호 + 모델명 + 해지요청일)
+        const key = `${row.customer_number}_${row.model_name}_${terminationDateStr}`;
+        if (existingKeys.has(key)) {
+          result.duplicate++;
+          continue;
+        }
         const branchCode = extractBranchCode(row.employee_number);
 
         const withinOneYear = isWithinOneYear(contractDate, terminationDate);
