@@ -201,3 +201,180 @@ export interface BranchStats {
   received: number;
   cancelled: number;
 }
+
+// =============================================
+// 제품 회수 (Product Recovery) 관련 타입
+// =============================================
+
+// 제품 회수 유형
+export type ProductRecoveryType = '철거' | '불량교환';
+
+// 제품 회수 선택 방식
+export type ProductSelectionType = '자동' | '수동';
+
+// 제품 회수 상태 (부품 회수와 동일한 플로우)
+export type ProductRecoveryStatus = '미선택' | '회수대기' | '회수완료' | '발송' | '입고완료' | '발송불가';
+
+// 제품 회수 원본 데이터 (철거/불량교환 엑셀에서 업로드)
+export interface ProductRecovery {
+  id: string;
+
+  // 엑셀 원본 데이터
+  request_date: string;                // 요청일자
+  request_branch: string;              // 요청지점 (법인명)
+  customer_number: string;             // 고객번호 (1-01-250201-0001 형식)
+  customer_name?: string;              // 고객명
+  orderer_name?: string;               // 주문자명
+  model_name: string;                  // 모델명
+
+  // 철거 전용 필드
+  penalty_fee?: string;                // 위약금
+  registration_fee?: string;           // 등록비
+  other_discount?: string;             // 기타할인
+  consumable_fee?: string;             // 소모품비
+  removal_fee?: string;                // 철거비
+  fault_code?: string;                 // 고장코드
+
+  // 공통 필드
+  new_request?: string;                // 신규접수
+  termination_request_date: string;    // 계약해지요청일
+  work_request_large?: string;         // 작업의뢰(대)
+  work_request_medium?: string;        // 작업의뢰(중)
+  work_request_small?: string;         // 작업의뢰(소)
+  special_notes?: string;              // 특이사항
+  request_notes?: string;              // 요청사항
+  rejection_reason?: string;           // 반려사유
+  sales_deduction?: string;            // 매출차감
+  misc_profit_deduction?: string;      // 잡이익차감
+  approval_status: string;             // 품의진행상태
+  employee_number: string;             // 사원번호
+  status_raw?: string;                 // 원본 상태
+
+  // 회수 유형
+  recovery_type: ProductRecoveryType;  // 철거 or 불량교환
+
+  // 자동선택 관련
+  contract_date: string;               // 계약일 (고객번호에서 추출)
+  is_within_one_year: boolean;         // 1년 이내 여부
+  is_auto_recovery_model: boolean;     // CBT-/CWS- 모델 여부
+  is_auto_selected: boolean;           // 자동선택 대상 여부 (둘 다 만족)
+  selection_type?: ProductSelectionType; // 선택 방식 (자동/수동)
+
+  // 법인 배정
+  branch_code: string;                 // 법인코드 (사원번호에서 추출)
+
+  // 회수 진행 상태
+  recovery_status: ProductRecoveryStatus;
+  selected_at?: string;                // 회수대상 선택 일시
+  selected_by?: string;                // 선택한 관리자
+
+  // 회수완료
+  collected_at?: string;
+  collected_by?: string;
+
+  // 발송
+  shipped_at?: string;
+  shipped_by?: string;
+  carrier?: string;
+  tracking_number?: string;
+
+  // 입고완료
+  received_at?: string;
+  received_by?: string;
+
+  // 발송불가
+  cancel_reason?: CancelReason;
+  cancel_reason_detail?: string;
+  cancelled_at?: string;
+  cancelled_by?: string;
+
+  // 메타데이터
+  created_at: string;
+  updated_at: string;
+}
+
+// 제품 회수 엑셀 파싱용 (철거)
+export interface ParsedRemovalExcelRow {
+  request_date: string;
+  request_branch: string;
+  customer_number: string;
+  customer_name?: string;
+  orderer_name?: string;
+  model_name: string;
+  penalty_fee?: string;
+  registration_fee?: string;
+  other_discount?: string;
+  consumable_fee?: string;
+  removal_fee?: string;
+  new_request?: string;
+  termination_request_date: string;
+  work_request_large?: string;
+  work_request_medium?: string;
+  work_request_small?: string;
+  special_notes?: string;
+  request_notes?: string;
+  fault_code?: string;
+  rejection_reason?: string;
+  sales_deduction?: string;
+  misc_profit_deduction?: string;
+  approval_status: string;
+  employee_number: string;
+  status_raw?: string;
+}
+
+// 제품 회수 엑셀 파싱용 (불량교환)
+export interface ParsedDefectExchangeExcelRow {
+  request_date: string;
+  request_branch: string;
+  customer_number: string;
+  customer_name?: string;
+  orderer_name?: string;
+  model_name: string;
+  new_request?: string;
+  termination_request_date: string;
+  work_request_large?: string;
+  work_request_medium?: string;
+  work_request_small?: string;
+  special_notes?: string;
+  request_notes?: string;
+  rejection_reason?: string;
+  sales_deduction?: string;
+  misc_profit_deduction?: string;
+  approval_status: string;
+  employee_number: string;
+  status_raw?: string;
+}
+
+// 제품 회수 업로드 이력
+export interface ProductRecoveryUploadHistory {
+  id: string;
+  file_name: string;
+  recovery_type: ProductRecoveryType;
+  total_rows: number;
+  approved_rows: number;          // 승인 건수
+  auto_selected_rows: number;     // 자동선택 건수
+  duplicate_rows: number;
+  uploaded_by?: string;
+  uploaded_at: string;
+}
+
+// 제품 회수 통계
+export interface ProductRecoveryStats {
+  total: number;
+  unselected: number;             // 미선택
+  waiting: number;                // 회수대기
+  collected: number;              // 회수완료
+  shipped: number;                // 발송
+  received: number;               // 입고완료
+  cancelled: number;              // 발송불가
+}
+
+// 자동선택 대상 모델 설정
+export interface AutoRecoveryModelConfig {
+  id: string;
+  model_prefix: string;           // CBT-, CWS- 등
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  created_by?: string;
+}

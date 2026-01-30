@@ -12,6 +12,7 @@ import {
   Package,
   Users,
   Mail,
+  Truck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,7 +21,8 @@ import { APP_VERSION } from '@/lib/version';
 
 const navItems = [
   { href: '/admin-cs/dashboard', label: '대시보드', icon: LayoutDashboard },
-  { href: '/admin-cs/upload', label: '엑셀 업로드', icon: Upload },
+  { href: '/admin-cs/upload', label: '부품 업로드', icon: Upload },
+  { href: '/admin-cs/product-recovery', label: '제품 회수 관리', icon: Truck },
   { href: '/admin-cs/materials', label: '회수대상 자재설정', icon: Settings },
   { href: '/admin-cs/calendar', label: '달력', icon: Calendar },
   { href: '/admin-cs/history', label: '이력 조회', icon: History },
