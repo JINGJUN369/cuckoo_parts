@@ -294,6 +294,15 @@ export default function AdminCSDashboardPage() {
     { name: '발송불가', value: filteredProductStats.cancelled, color: STATUS_COLORS['발송불가'] },
   ], [filteredProductStats]);
 
+  // 상태별 분포 (파이 차트용) - 통합
+  const combinedStatusDistribution = useMemo(() => [
+    { name: '회수대기', value: filteredCombinedStats.waiting, color: STATUS_COLORS['회수대기'] },
+    { name: '회수완료', value: filteredCombinedStats.collected, color: STATUS_COLORS['회수완료'] },
+    { name: '발송', value: filteredCombinedStats.shipped, color: STATUS_COLORS['발송'] },
+    { name: '입고완료', value: filteredCombinedStats.received, color: STATUS_COLORS['입고완료'] },
+    { name: '발송불가', value: filteredCombinedStats.cancelled, color: STATUS_COLORS['발송불가'] },
+  ], [filteredCombinedStats]);
+
   // 법인별 현황 (자재)
   const materialBranchStats = useMemo(() => {
     const branchMap: Record<string, { waiting: number; collected: number; shipped: number; received: number; cancelled: number }> = {};
@@ -368,6 +377,72 @@ export default function AdminCSDashboardPage() {
       }))
       .sort((a, b) => b.total - a.total);
   }, [mainFilteredProductData]);
+
+  // 법인별 현황 (통합 - 자재 + 제품)
+  const combinedBranchStats = useMemo(() => {
+    const branchMap: Record<string, { waiting: number; collected: number; shipped: number; received: number; cancelled: number; materialCount: number; productCount: number }> = {};
+
+    // 자재 데이터 집계
+    mainFilteredMaterialData.forEach((item) => {
+      if (!branchMap[item.branch_code]) {
+        branchMap[item.branch_code] = { waiting: 0, collected: 0, shipped: 0, received: 0, cancelled: 0, materialCount: 0, productCount: 0 };
+      }
+      branchMap[item.branch_code].materialCount++;
+
+      switch (item.status) {
+        case '회수대기':
+          branchMap[item.branch_code].waiting++;
+          break;
+        case '회수완료':
+          branchMap[item.branch_code].collected++;
+          break;
+        case '발송':
+          branchMap[item.branch_code].shipped++;
+          break;
+        case '입고완료':
+          branchMap[item.branch_code].received++;
+          break;
+        case '발송불가':
+          branchMap[item.branch_code].cancelled++;
+          break;
+      }
+    });
+
+    // 제품 데이터 집계
+    mainFilteredProductData.forEach((item) => {
+      const code = item.branch_code || 'UNKNOWN';
+      if (!branchMap[code]) {
+        branchMap[code] = { waiting: 0, collected: 0, shipped: 0, received: 0, cancelled: 0, materialCount: 0, productCount: 0 };
+      }
+      branchMap[code].productCount++;
+
+      switch (item.recovery_status) {
+        case '회수대기':
+          branchMap[code].waiting++;
+          break;
+        case '회수완료':
+          branchMap[code].collected++;
+          break;
+        case '발송':
+          branchMap[code].shipped++;
+          break;
+        case '입고완료':
+          branchMap[code].received++;
+          break;
+        case '발송불가':
+          branchMap[code].cancelled++;
+          break;
+      }
+    });
+
+    return Object.entries(branchMap)
+      .map(([branch, counts]) => ({
+        branch,
+        ...counts,
+        total: counts.waiting + counts.collected + counts.shipped + counts.received + counts.cancelled,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [mainFilteredMaterialData, mainFilteredProductData]);
 
   // 품목별 현황 (자재코드 기준)
   const materialItemStats = useMemo(() => {
@@ -964,6 +1039,94 @@ export default function AdminCSDashboardPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* 통합 차트 영역 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader><CardTitle className="text-lg">상태별 분포 (통합)</CardTitle></CardHeader>
+              <CardContent>
+                {filteredCombinedStats.total > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie data={combinedStatusDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}>
+                        {combinedStatusDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">데이터가 없습니다.</div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-lg">법인별 현황 (상위 10개)</CardTitle></CardHeader>
+              <CardContent>
+                {combinedBranchStats.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={combinedBranchStats.slice(0, 10)} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis dataKey="branch" type="category" width={60} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="waiting" name="회수대기" stackId="a" fill={STATUS_COLORS['회수대기']} />
+                      <Bar dataKey="collected" name="회수완료" stackId="a" fill={STATUS_COLORS['회수완료']} />
+                      <Bar dataKey="shipped" name="발송" stackId="a" fill={STATUS_COLORS['발송']} />
+                      <Bar dataKey="received" name="입고완료" stackId="a" fill={STATUS_COLORS['입고완료']} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">데이터가 없습니다.</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 통합 법인별 현황 테이블 */}
+          <Card>
+            <CardHeader><CardTitle className="text-lg">법인별 현황 (자재 + 제품)</CardTitle></CardHeader>
+            <CardContent>
+              {combinedBranchStats.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>법인코드</TableHead>
+                      <TableHead className="text-center">자재</TableHead>
+                      <TableHead className="text-center">제품</TableHead>
+                      <TableHead className="text-center">회수대기</TableHead>
+                      <TableHead className="text-center">회수완료</TableHead>
+                      <TableHead className="text-center">발송</TableHead>
+                      <TableHead className="text-center">입고완료</TableHead>
+                      <TableHead className="text-center">발송불가</TableHead>
+                      <TableHead className="text-center">합계</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {combinedBranchStats.map((branch) => (
+                      <TableRow key={branch.branch}>
+                        <TableCell className="font-medium">{branch.branch}</TableCell>
+                        <TableCell className="text-center"><Badge variant="outline">{branch.materialCount}</Badge></TableCell>
+                        <TableCell className="text-center"><Badge variant="secondary">{branch.productCount}</Badge></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="bg-red-50 text-red-700">{branch.waiting}</Badge></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="bg-amber-50 text-amber-700">{branch.collected}</Badge></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="bg-blue-50 text-blue-700">{branch.shipped}</Badge></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="bg-green-50 text-green-700">{branch.received}</Badge></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="bg-gray-100 text-gray-700">{branch.cancelled}</Badge></TableCell>
+                        <TableCell className="text-center font-medium">{branch.total}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="py-8 text-center text-muted-foreground">아직 데이터가 없습니다.</div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* 자재 탭 */}
