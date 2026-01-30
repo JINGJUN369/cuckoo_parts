@@ -779,22 +779,22 @@ export default function BranchDashboardPage() {
 
       {/* 메인 탭 (통합/자재/제품) */}
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'overview' | 'material' | 'product')} className="print:hidden">
-        <TabsList className="grid w-full grid-cols-3 mb-4 h-12 p-1 bg-slate-100 rounded-lg">
+        <TabsList className="grid w-full grid-cols-3 mb-4 h-12 p-1 bg-slate-50 rounded-lg border border-slate-200">
           <TabsTrigger
             value="overview"
-            className="text-sm h-10 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
+            className="text-sm h-10 bg-slate-100 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
           >
             📊 통합 현황
           </TabsTrigger>
           <TabsTrigger
             value="material"
-            className="text-sm h-10 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
+            className="text-sm h-10 bg-slate-100 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
           >
             🔧 자재 ({totalStats.total})
           </TabsTrigger>
           <TabsTrigger
             value="product"
-            className="text-sm h-10 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
+            className="text-sm h-10 bg-slate-100 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
           >
             📦 제품 ({productTotalStats.total})
           </TabsTrigger>
