@@ -31,13 +31,13 @@ export function AdminQualityNav() {
   return (
     <aside className="w-64 bg-white border-r min-h-screen flex flex-col">
       {/* 헤더 */}
-      <div className="p-4 border-b">
+      <div className="p-4" style={{ backgroundColor: '#791015' }}>
         <div className="flex items-center gap-2 mb-1">
-          <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain grayscale" />
-          <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
+          <Image src="/cuckoo-logo.png" alt="CUCKOO" width={80} height={28} className="object-contain brightness-0 invert" />
+          <span className="text-xs text-white/80 bg-white/20 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
         </div>
-        <span className="font-bold text-sm text-gray-700">쿠쿠 회수관리 시스템</span>
-        <p className="text-xs text-muted-foreground mt-1">품질팀</p>
+        <span className="font-bold text-sm text-white">쿠쿠 회수관리 시스템</span>
+        <p className="text-xs text-white/70 mt-1">품질팀</p>
       </div>
 
       {/* 네비게이션 */}

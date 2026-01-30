@@ -72,22 +72,22 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
+        <CardHeader className="text-center rounded-t-lg" style={{ backgroundColor: '#791015' }}>
           <div className="flex justify-center mb-4">
             <Image
               src="/cuckoo-logo.png"
               alt="CUCKOO"
               width={120}
               height={40}
-              className="object-contain grayscale"
+              className="object-contain brightness-0 invert"
               priority
             />
           </div>
           <div className="flex items-center justify-center gap-2">
-            <CardTitle className="text-2xl">쿠쿠 회수관리 시스템</CardTitle>
-            <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
+            <CardTitle className="text-2xl text-white">쿠쿠 회수관리 시스템</CardTitle>
+            <span className="text-xs text-white/80 bg-white/20 px-1.5 py-0.5 rounded">v{APP_VERSION}</span>
           </div>
-          <CardDescription>
+          <CardDescription className="text-white/70">
             아이디와 비밀번호를 입력해주세요
           </CardDescription>
         </CardHeader>
