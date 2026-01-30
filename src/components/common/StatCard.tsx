@@ -8,6 +8,7 @@ interface StatCardProps {
   value: number | string;
   icon?: LucideIcon;
   description?: string;
+  descriptionClassName?: string;
   trend?: {
     value: number;
     isPositive: boolean;
@@ -20,6 +21,7 @@ export function StatCard({
   value,
   icon: Icon,
   description,
+  descriptionClassName,
   trend,
   className = '',
 }: StatCardProps) {
@@ -34,7 +36,7 @@ export function StatCard({
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
         {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
+          <p className={`text-xs mt-1 ${descriptionClassName || 'text-muted-foreground'}`}>{description}</p>
         )}
         {trend && (
           <p

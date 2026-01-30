@@ -230,17 +230,37 @@ export default function BranchDashboardPage() {
       .sort((a, b) => b.waiting - a.waiting || b.total - a.total);
   }, [searchedData]);
 
-  // 6일 경과 회수완료 건 체크
-  const overdueItems = useMemo(() => {
-    const sixDaysAgo = new Date();
-    sixDaysAgo.setDate(sixDaysAgo.getDate() - 6);
+  // 경과일별 회수완료 건 분류
+  const urgencyStats = useMemo(() => {
+    const now = new Date();
+    const stats = {
+      day1: [] as MaterialUsage[], // 1일 경과
+      day2: [] as MaterialUsage[], // 2일 경과
+      day3to5: [] as MaterialUsage[], // 3~5일 경과
+      day6plus: [] as MaterialUsage[], // 6일 이상 (긴급)
+    };
 
-    return collectedData.filter(item => {
-      if (!item.collected_at) return false;
+    collectedData.forEach(item => {
+      if (!item.collected_at) return;
       const collectedDate = new Date(item.collected_at);
-      return collectedDate < sixDaysAgo;
+      const daysPassed = Math.floor((now.getTime() - collectedDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysPassed >= 6) {
+        stats.day6plus.push(item);
+      } else if (daysPassed >= 3) {
+        stats.day3to5.push(item);
+      } else if (daysPassed >= 2) {
+        stats.day2.push(item);
+      } else if (daysPassed >= 1) {
+        stats.day1.push(item);
+      }
     });
+
+    return stats;
   }, [collectedData]);
+
+  // 6일 경과 회수완료 건 체크 (기존 호환)
+  const overdueItems = useMemo(() => urgencyStats.day6plus, [urgencyStats]);
 
   // 경고 팝업 표시
   useEffect(() => {
@@ -452,23 +472,61 @@ export default function BranchDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* 6일 경과 경고 */}
-      {overdueItems.length > 0 && showOverdueWarning && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>발송 필요 알림</AlertTitle>
-          <AlertDescription>
-            회수 후 6일이 경과한 부품이 {overdueItems.length}건 있습니다.
-            빠른 시일 내 발송해주세요.
+      {/* 발송 필요 알림 (경과일별) */}
+      {collectedData.length > 0 && showOverdueWarning && (
+        <div className="space-y-2">
+          {/* 6일 이상 - 긴급 */}
+          {urgencyStats.day6plus.length > 0 && (
+            <Alert variant="destructive" className="border-2 animate-pulse">
+              <AlertTriangle className="h-5 w-5" />
+              <AlertTitle className="text-base font-bold">🚨 긴급 발송 필요!</AlertTitle>
+              <AlertDescription className="text-sm">
+                회수 후 <strong>6일 이상</strong> 경과한 부품이 <strong className="text-lg">{urgencyStats.day6plus.length}건</strong> 있습니다.
+                <span className="block mt-1 text-red-700 font-medium">오늘 중으로 발송해주세요!</span>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 3~5일 경과 - 주의 */}
+          {urgencyStats.day3to5.length > 0 && (
+            <Alert className="border-amber-500 bg-amber-50 text-amber-900">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertTitle className="text-amber-800">⚠️ 발송 권고</AlertTitle>
+              <AlertDescription className="text-amber-700">
+                회수 후 <strong>3~5일</strong> 경과: <strong>{urgencyStats.day3to5.length}건</strong>
+                <span className="ml-2 text-sm">- 빠른 발송이 필요합니다</span>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 1~2일 경과 - 안내 */}
+          {(urgencyStats.day1.length > 0 || urgencyStats.day2.length > 0) && (
+            <Alert className="border-blue-300 bg-blue-50 text-blue-900">
+              <Clock className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-blue-800">📦 발송 대기 중</AlertTitle>
+              <AlertDescription className="text-blue-700">
+                {urgencyStats.day2.length > 0 && (
+                  <span className="mr-4">2일 경과: <strong>{urgencyStats.day2.length}건</strong></span>
+                )}
+                {urgencyStats.day1.length > 0 && (
+                  <span>1일 경과: <strong>{urgencyStats.day1.length}건</strong></span>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 닫기 버튼 */}
+          <div className="text-right">
             <Button
-              variant="link"
-              className="p-0 h-auto ml-2 text-red-700 underline"
+              variant="ghost"
+              size="sm"
+              className="text-gray-500 hover:text-gray-700"
               onClick={() => setShowOverdueWarning(false)}
             >
-              닫기
+              알림 숨기기
             </Button>
-          </AlertDescription>
-        </Alert>
+          </div>
+        </div>
       )}
 
       {/* 현황 통계 (필터 적용) */}
@@ -485,10 +543,30 @@ export default function BranchDashboardPage() {
           className="border-l-4 border-l-red-500"
         />
         <StatCard
-          title="회수완료 (발송대기)"
+          title="🚚 발송대기"
           value={totalStats.collected.toLocaleString()}
           icon={CheckCircle2}
-          className="border-l-4 border-l-amber-500"
+          className={`border-l-4 ${
+            urgencyStats.day6plus.length > 0
+              ? 'border-l-red-500 bg-red-50 ring-2 ring-red-300 animate-pulse'
+              : urgencyStats.day3to5.length > 0
+                ? 'border-l-amber-500 bg-amber-50'
+                : 'border-l-amber-500'
+          }`}
+          description={
+            urgencyStats.day6plus.length > 0
+              ? `🚨 긴급 ${urgencyStats.day6plus.length}건 발송필요!`
+              : urgencyStats.day3to5.length > 0
+                ? `⚠️ ${urgencyStats.day3to5.length}건 발송권고`
+                : undefined
+          }
+          descriptionClassName={
+            urgencyStats.day6plus.length > 0
+              ? 'text-red-600 font-bold'
+              : urgencyStats.day3to5.length > 0
+                ? 'text-amber-600 font-medium'
+                : undefined
+          }
         />
         <StatCard
           title="발송완료"
@@ -551,17 +629,34 @@ export default function BranchDashboardPage() {
         <>
           {/* 탭 */}
           <Tabs defaultValue="waiting" id="tour-tabs">
-            <TabsList className="print:hidden">
-              <TabsTrigger value="waiting">
+            <TabsList className="print:hidden h-auto p-1">
+              <TabsTrigger value="waiting" className="py-2">
                 회수대기 ({searchStats.waiting})
               </TabsTrigger>
-              <TabsTrigger value="collected">
-                회수완료 ({searchStats.collected})
-                {searchStats.overdue > 0 && (
-                  <Badge variant="destructive" className="ml-1">{searchStats.overdue}</Badge>
+              <TabsTrigger
+                value="collected"
+                className={`py-2 relative ${
+                  searchStats.collected > 0
+                    ? 'bg-amber-100 text-amber-900 data-[state=active]:bg-amber-500 data-[state=active]:text-white font-bold'
+                    : ''
+                }`}
+              >
+                <span className="flex items-center gap-1">
+                  {searchStats.collected > 0 && <TruckIcon className="h-4 w-4" />}
+                  발송대기 ({searchStats.collected})
+                </span>
+                {urgencyStats.day6plus.length > 0 && (
+                  <Badge variant="destructive" className="ml-1 animate-pulse">
+                    긴급 {urgencyStats.day6plus.length}
+                  </Badge>
+                )}
+                {urgencyStats.day3to5.length > 0 && urgencyStats.day6plus.length === 0 && (
+                  <Badge className="ml-1 bg-amber-500">
+                    {urgencyStats.day3to5.length}
+                  </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="shipped">
+              <TabsTrigger value="shipped" className="py-2">
                 발송완료 ({searchStats.shipped})
               </TabsTrigger>
             </TabsList>
