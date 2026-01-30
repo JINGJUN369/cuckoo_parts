@@ -162,11 +162,11 @@ export default function BranchDashboardPage() {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [waitingData]);
 
-  // 기사별 전체 현황 통계 (전체 데이터 기준)
+  // 기사별 현황 통계 (필터된 데이터 기준)
   const technicianStats = useMemo(() => {
     const stats: Record<string, { waiting: number; collected: number; shipped: number; total: number }> = {};
 
-    branchData.forEach(item => {
+    searchedData.forEach(item => {
       const tech = item.technician_code || '미지정';
       if (!stats[tech]) {
         stats[tech] = { waiting: 0, collected: 0, shipped: 0, total: 0 };
@@ -191,7 +191,7 @@ export default function BranchDashboardPage() {
     return Object.entries(stats)
       .map(([tech, data]) => ({ tech, ...data }))
       .sort((a, b) => b.waiting - a.waiting || b.total - a.total);
-  }, [branchData]);
+  }, [searchedData]);
 
   // 6일 경과 회수완료 건 체크
   const overdueItems = useMemo(() => {
@@ -280,13 +280,13 @@ export default function BranchDashboardPage() {
     window.print();
   };
 
-  // 상태별 통계 (전체 데이터 기준)
+  // 상태별 통계 (필터된 데이터 기준)
   const totalStats = useMemo(() => ({
-    total: branchData.length,
-    waiting: branchData.filter(item => item.status === '회수대기').length,
-    collected: branchData.filter(item => item.status === '회수완료').length,
-    shipped: branchData.filter(item => item.status === '발송').length,
-  }), [branchData]);
+    total: searchedData.length,
+    waiting: waitingData.length,
+    collected: collectedData.length,
+    shipped: shippedData.length,
+  }), [searchedData, waitingData, collectedData, shippedData]);
 
   // 검색 결과 통계
   const searchStats = useMemo(() => ({
@@ -305,109 +305,25 @@ export default function BranchDashboardPage() {
         <p className="text-muted-foreground">법인코드: {session?.branchCode}</p>
       </div>
 
-      {/* 전체 현황 통계 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard
-          title="전체 회수대상"
-          value={totalStats.total.toLocaleString()}
-          icon={Package}
-        />
-        <StatCard
-          title="회수대기"
-          value={totalStats.waiting.toLocaleString()}
-          icon={Clock}
-          className="border-l-4 border-l-red-500"
-        />
-        <StatCard
-          title="회수완료 (발송대기)"
-          value={totalStats.collected.toLocaleString()}
-          icon={CheckCircle2}
-          className="border-l-4 border-l-amber-500"
-        />
-        <StatCard
-          title="발송완료"
-          value={totalStats.shipped.toLocaleString()}
-          icon={TruckIcon}
-          className="border-l-4 border-l-blue-500"
-        />
-      </div>
-
-      {/* 기사별 회수 현황 */}
-      {technicianStats.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              기사별 회수 현황
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {technicianStats.slice(0, 9).map(({ tech, waiting, collected, shipped, total }) => {
-                const completedRate = total > 0 ? Math.round(((collected + shipped) / total) * 100) : 0;
-                return (
-                  <div
-                    key={tech}
-                    className={`p-3 rounded-lg border ${waiting > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge variant="outline" className="font-semibold">{tech}</Badge>
-                      <span className="text-xs text-muted-foreground">총 {total}건</span>
-                    </div>
-                    {/* 진행률 바 */}
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all"
-                        style={{ width: `${completedRate}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-red-600 font-medium">대기 {waiting}</span>
-                      <span className="text-amber-600">완료 {collected}</span>
-                      <span className="text-blue-600">발송 {shipped}</span>
-                      <span className="text-green-600 font-medium">{completedRate}%</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {technicianStats.length > 9 && (
-              <p className="text-xs text-muted-foreground mt-3 text-center">
-                외 {technicianStats.length - 9}명의 기사
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 6일 경과 경고 */}
-      {overdueItems.length > 0 && showOverdueWarning && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>발송 필요 알림</AlertTitle>
-          <AlertDescription>
-            회수 후 6일이 경과한 부품이 {overdueItems.length}건 있습니다.
-            빠른 시일 내 발송해주세요.
-            <Button
-              variant="link"
-              className="p-0 h-auto ml-2 text-red-700 underline"
-              onClick={() => setShowOverdueWarning(false)}
-            >
-              닫기
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* 날짜 검색 */}
+      {/* 날짜 검색 (최상단) */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">날짜 검색</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Search className="h-4 w-4" />
+            조회 기간
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {/* 빠른 선택 버튼 */}
             <div className="flex flex-wrap gap-2">
+              <Button
+                variant={selectedPreset === 'last30days' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetSelect('last30days')}
+              >
+                최근 30일
+              </Button>
               <Button
                 variant={selectedPreset === 'today' ? 'default' : 'outline'}
                 size="sm"
@@ -482,25 +398,114 @@ export default function BranchDashboardPage() {
                 </Button>
               )}
             </div>
+
+            {/* 조회 기간 표시 */}
+            {isSearched && (
+              <p className="text-sm text-muted-foreground pt-2 border-t">
+                조회 기간: <strong>{appliedDateFrom}</strong> ~ <strong>{appliedDateTo}</strong>
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* 검색 결과 */}
+      {/* 6일 경과 경고 */}
+      {overdueItems.length > 0 && showOverdueWarning && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>발송 필요 알림</AlertTitle>
+          <AlertDescription>
+            회수 후 6일이 경과한 부품이 {overdueItems.length}건 있습니다.
+            빠른 시일 내 발송해주세요.
+            <Button
+              variant="link"
+              className="p-0 h-auto ml-2 text-red-700 underline"
+              onClick={() => setShowOverdueWarning(false)}
+            >
+              닫기
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* 현황 통계 (필터 적용) */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <StatCard
+          title="전체 회수대상"
+          value={totalStats.total.toLocaleString()}
+          icon={Package}
+        />
+        <StatCard
+          title="회수대기"
+          value={totalStats.waiting.toLocaleString()}
+          icon={Clock}
+          className="border-l-4 border-l-red-500"
+        />
+        <StatCard
+          title="회수완료 (발송대기)"
+          value={totalStats.collected.toLocaleString()}
+          icon={CheckCircle2}
+          className="border-l-4 border-l-amber-500"
+        />
+        <StatCard
+          title="발송완료"
+          value={totalStats.shipped.toLocaleString()}
+          icon={TruckIcon}
+          className="border-l-4 border-l-blue-500"
+        />
+      </div>
+
+      {/* 기사별 회수 현황 (필터 적용) */}
+      {technicianStats.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              기사별 회수 현황
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {technicianStats.slice(0, 9).map(({ tech, waiting, collected, shipped, total }) => {
+                const completedRate = total > 0 ? Math.round(((collected + shipped) / total) * 100) : 0;
+                return (
+                  <div
+                    key={tech}
+                    className={`p-3 rounded-lg border ${waiting > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <Badge variant="outline" className="font-semibold">{tech}</Badge>
+                      <span className="text-xs text-muted-foreground">총 {total}건</span>
+                    </div>
+                    {/* 진행률 바 */}
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all"
+                        style={{ width: `${completedRate}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-red-600 font-medium">대기 {waiting}</span>
+                      <span className="text-amber-600">완료 {collected}</span>
+                      <span className="text-blue-600">발송 {shipped}</span>
+                      <span className="text-green-600 font-medium">{completedRate}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {technicianStats.length > 9 && (
+              <p className="text-xs text-muted-foreground mt-3 text-center">
+                외 {technicianStats.length - 9}명의 기사
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 상세 데이터 탭 */}
       {isSearched && (
         <>
-          {/* 검색 결과 통계 */}
-          <div className="bg-gray-50 p-4 rounded-lg print:bg-white print:border">
-            <p className="text-sm text-muted-foreground mb-2">
-              검색 기간: {appliedDateFrom} ~ {appliedDateTo}
-            </p>
-            <div className="flex gap-6 text-sm">
-              <span>회수대기: <strong className="text-red-600">{searchStats.waiting}건</strong></span>
-              <span>회수완료: <strong className="text-amber-600">{searchStats.collected}건</strong></span>
-              <span>발송완료: <strong className="text-blue-600">{searchStats.shipped}건</strong></span>
-            </div>
-          </div>
-
           {/* 탭 */}
           <Tabs defaultValue="waiting">
             <TabsList className="print:hidden">
