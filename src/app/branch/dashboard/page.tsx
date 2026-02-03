@@ -33,80 +33,138 @@ import { useAuth } from '@/hooks/useAuth';
 import { MaterialUsage, Carrier, CancelReason, ProductRecovery, ProductRecoveryStatus } from '@/types';
 import { toast } from 'sonner';
 
-// 온보딩 투어 단계 정의 (동적으로 생성)
+// 온보딩 투어 단계 정의 (15단계 - 업그레이드)
 const createTourSteps = (hasWaitingData: boolean, hasCollectedData: boolean): TourStep[] => {
-  const steps: TourStep[] = [
-    {
-      target: '#tour-date-filter',
-      title: '1단계: 조회 기간 선택',
-      content: '먼저 조회할 기간을 선택하세요. 빠른 선택 버튼으로 오늘, 1주일, 30일 등을 쉽게 선택할 수 있습니다.',
-      position: 'bottom',
-    },
-    {
-      target: '#tour-stat-cards',
-      title: '2단계: 현황 확인',
-      content: '회수대기, 발송대기, 발송완료 건수를 한눈에 확인하세요. 발송대기가 빨갛게 표시되면 긴급 발송이 필요합니다!',
-      position: 'bottom',
-    },
-  ];
+  const steps: TourStep[] = [];
 
-  // 기사별 현황
+  // === 기본 소개 (1-3단계) ===
   steps.push({
-    target: '#tour-technician-stats',
-    title: '3단계: 기사별 현황',
-    content: '담당 기사별 진행 상황입니다. 회수대기가 많은 기사는 빨간색으로 표시됩니다.',
+    target: '#tour-welcome',
+    title: '👋 쿠쿠 회수관리 시스템에 오신 것을 환영합니다!',
+    content: '이 가이드는 설치법인 담당자를 위한 회수관리 기능을 소개합니다.\n\n📌 자재/제품 회수 → 발송 → 추적까지 한 곳에서 관리하세요.\n⏱️ 약 3분 소요됩니다.',
     position: 'bottom',
   });
 
-  // 회수대기 탭 이동
+  steps.push({
+    target: '#tour-main-tabs',
+    title: '1단계: 메인 탭 구조',
+    content: '📊 통합현황: 자재+제품 전체 요약\n🔧 자재: 부품/자재 회수 관리\n📦 제품: 완제품 회수 관리\n\n필요한 탭을 선택하여 작업하세요!',
+    position: 'bottom',
+  });
+
+  steps.push({
+    target: '#tour-date-filter',
+    title: '2단계: 조회 기간 선택',
+    content: '날짜 범위를 선택하고 검색 버튼을 누르세요.\n\n⚡ 빠른 선택: 오늘, 1주일, 30일 등 버튼으로 간편 선택\n📅 수동 선택: 시작일~종료일 직접 입력',
+    position: 'bottom',
+  });
+
+  // === 통합현황 (4-5단계) ===
+  steps.push({
+    target: '#tour-main-tabs',
+    title: '3단계: 통합현황 탭으로 이동',
+    content: '먼저 통합현황 탭을 확인해봅시다. 자재와 제품의 전체 상황을 한눈에 파악할 수 있습니다.',
+    position: 'bottom',
+    action: 'click-overview-tab',
+  });
+
+  steps.push({
+    target: '#tour-overview-stats',
+    title: '4단계: 통합 통계 확인',
+    content: '자재와 제품을 합친 전체 현황입니다.\n\n✅ 전체 회수대상, 회수대기, 발송대기, 발송완료, 발송불가\n📊 각 카드에서 자재/제품 개별 건수도 확인 가능',
+    position: 'bottom',
+  });
+
+  steps.push({
+    target: '#tour-print-button',
+    title: '5단계: 인쇄 기능',
+    content: '📄 인쇄 버튼으로 현황을 출력할 수 있습니다.\n\n• 통합 인쇄: 자재+제품 전체\n• 자재 인쇄: 자재만\n• 제품 인쇄: 제품만\n• 발송내역 출력: 택배 동봉용 (선택 항목)',
+    position: 'bottom',
+  });
+
+  // === 자재 회수 프로세스 (6-10단계) ===
+  steps.push({
+    target: '#tour-main-tabs',
+    title: '6단계: 자재 탭으로 이동',
+    content: '이제 자재 회수 프로세스를 살펴봅시다. 자재 탭을 클릭합니다.',
+    position: 'bottom',
+    action: 'click-material-tab',
+  });
+
+  steps.push({
+    target: '#tour-stat-cards',
+    title: '7단계: 자재 현황 확인',
+    content: '자재의 상태별 건수를 확인하세요.\n\n🔴 회수대기: 기사가 회수 예정\n🟠 발송대기: 회수 완료, 발송 필요 (⚠️ 긴급 건 강조)\n🔵 발송완료: 품질팀으로 발송됨\n⚫ 발송불가: 발송 불가능 사유',
+    position: 'bottom',
+  });
+
+  steps.push({
+    target: '#tour-technician-stats',
+    title: '8단계: 기사별 현황',
+    content: '담당 기사별 회수 진행 상황입니다.\n\n📊 진행률 바: 완료/발송 비율\n🔴 대기가 많은 기사: 빨간색 배경 강조',
+    position: 'bottom',
+  });
+
   steps.push({
     target: '#tour-tab-waiting',
-    title: '4단계: 회수대기 탭 이동',
-    content: '회수대기 목록을 확인하려면 이 탭을 클릭하세요. 자동으로 이동합니다!',
+    title: '9단계: 회수대기 → 회수완료',
+    content: '회수대기 탭에서 기사가 회수한 항목을 "회수완료" 처리합니다.\n\n자동으로 탭을 이동하겠습니다!',
     position: 'top',
     action: 'click-waiting-tab',
   });
 
-  // 회수완료 버튼 설명 + 데모
   steps.push({
     target: '#tour-action-info',
-    title: '5단계: 회수완료 처리 연습',
+    title: '10단계: 회수완료 처리 연습',
     content: hasWaitingData
-      ? '기사가 부품을 회수했다면 [회수완료] 버튼을 클릭합니다. 아래 버튼으로 직접 연습해보세요! (실제 데이터에 영향 없음)'
-      : '회수대기 건이 있으면 [회수완료] 버튼이 표시됩니다. 클릭하면 부품이 "발송대기" 상태로 변경됩니다.',
+      ? '기사가 부품을 회수하면 [회수완료] 버튼을 클릭합니다.\n\n아래 버튼으로 직접 연습해보세요! (실제 데이터 영향 없음)'
+      : '회수대기 건이 있으면 [회수완료] 버튼이 표시됩니다.\n클릭하면 "발송대기" 상태로 변경됩니다.',
     position: 'bottom',
-    isInteractive: true,
-    action: 'demo-collect',
-    demoButtonText: '🎯 회수완료 클릭 연습하기',
+    isInteractive: hasWaitingData,
+    action: hasWaitingData ? 'demo-collect' : undefined,
+    demoButtonText: hasWaitingData ? '🎯 회수완료 클릭 연습하기' : undefined,
   });
 
-  // 발송대기 탭 이동
   steps.push({
     target: '#tour-tab-collected',
-    title: '6단계: 발송대기 탭 이동',
-    content: '회수된 부품은 품질팀으로 발송해야 합니다. 발송대기 탭으로 이동합니다!',
+    title: '11단계: 발송대기 → 발송',
+    content: '발송대기 탭에서 회수된 부품을 품질팀으로 발송합니다.\n\n탭을 이동합니다!',
     position: 'top',
     action: 'click-collected-tab',
   });
 
-  // 발송 버튼 설명 + 송장번호 입력 데모
   steps.push({
     target: '#tour-collected-table',
-    title: '7단계: 발송 처리 연습',
+    title: '12단계: 발송 처리 + 일괄 작업',
     content: hasCollectedData
-      ? '[발송] 버튼을 클릭하면 운송회사와 송장번호를 입력합니다. 아래 버튼으로 송장번호 입력을 연습해보세요!'
-      : '발송대기 건이 있으면 [발송] 버튼이 표시됩니다. 클릭하여 운송회사와 송장번호를 입력하세요.',
+      ? '✅ 체크박스: 여러 건 선택\n📦 [발송] 버튼: 운송회사 + 송장번호 입력\n🖨️ [내역출력]: 택배 동봉용 출력\n❌ [발송불가]: 불가 사유 등록\n\n아래 버튼으로 발송 처리를 연습해보세요!'
+      : '발송대기 건이 있으면:\n• 개별 [발송] 버튼\n• 체크박스로 여러 건 선택 후 일괄 발송\n• 발송내역 출력 (택배 동봉용)',
     position: 'bottom',
-    isInteractive: true,
-    action: 'demo-ship',
-    demoButtonText: '📦 발송 & 송장번호 입력 연습하기',
+    isInteractive: hasCollectedData,
+    action: hasCollectedData ? 'demo-ship' : undefined,
+    demoButtonText: hasCollectedData ? '📦 발송 & 송장번호 입력 연습하기' : undefined,
   });
 
-  // 마지막 단계
+  // === 제품 회수 (13단계) ===
   steps.push({
-    target: '#tour-stat-cards',
+    target: '#tour-main-tabs',
+    title: '13단계: 제품 회수 관리',
+    content: '제품 탭도 자재와 동일한 방식으로 동작합니다.\n\n📦 제품 회수대기 → 회수완료 → 발송\n🏢 모델명별 자동 주소 분기:\n  • CBT-C/D/I/L → 나누텍\n  • CWC-A → 로보터스\n  • 기타 → 품질팀',
+    position: 'bottom',
+  });
+
+  // === 마무리 (14-15단계) ===
+  steps.push({
+    target: '#tour-print-button',
+    title: '14단계: 인쇄 기능 총정리',
+    content: '📄 인쇄 방법 4가지:\n\n1️⃣ 통합 인쇄: 자재+제품 모두\n2️⃣ 자재 인쇄: 자재만\n3️⃣ 제품 인쇄: 제품만\n4️⃣ 발송내역 출력: 체크박스 선택 후 "내역출력" 버튼 (택배 동봉용)',
+    position: 'bottom',
+  });
+
+  steps.push({
+    target: '#tour-welcome',
     title: '🎉 가이드 완료!',
-    content: '축하합니다! 이제 회수관리를 시작할 준비가 되었습니다.\n\n✅ 회수대기 → 회수완료 → 발송 순서로 처리하세요.\n❓ 궁금하면 우측 상단 "가이드 다시보기"를 클릭하세요.',
+    content: '축하합니다! 이제 쿠쿠 회수관리 시스템을 사용할 준비가 되었습니다.\n\n✅ 기본 흐름: 회수대기 → 회수완료 → 발송\n📊 통합/자재/제품 탭 활용\n🖨️ 인쇄 기능 4가지\n❓ 궁금하면 우측 상단 "가이드 다시보기" 클릭',
     position: 'bottom',
   });
 
@@ -409,6 +467,10 @@ export default function BranchDashboardPage() {
       setActiveTab('waiting');
     } else if (action === 'click-collected-tab') {
       setActiveTab('collected');
+    } else if (action === 'click-overview-tab') {
+      setMainTab('overview');
+    } else if (action === 'click-material-tab') {
+      setMainTab('material');
     }
   }, []);
 
@@ -685,7 +747,7 @@ export default function BranchDashboardPage() {
   return (
     <div className="space-y-6">
       {/* 헤더 */}
-      <div className="flex items-start justify-between">
+      <div id="tour-welcome" className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">회수 관리 대시보드</h1>
           <p className="text-muted-foreground">법인코드: {session?.branchCode}</p>
@@ -784,6 +846,7 @@ export default function BranchDashboardPage() {
               </Button>
               {isSearched && (
                 <Button
+                  id="tour-print-button"
                   variant="outline"
                   onClick={() => handlePrint(mainTab === 'overview' ? 'combined' : mainTab === 'material' ? 'material' : 'product')}
                   className="print:hidden"
@@ -806,7 +869,7 @@ export default function BranchDashboardPage() {
 
       {/* 메인 탭 (통합/자재/제품) */}
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'overview' | 'material' | 'product')} className="print:hidden">
-        <TabsList className="grid w-full grid-cols-3 mb-4 h-12 p-1 bg-slate-50 rounded-lg border border-slate-200">
+        <TabsList id="tour-main-tabs" className="grid w-full grid-cols-3 mb-4 h-12 p-1 bg-slate-50 rounded-lg border border-slate-200">
           <TabsTrigger
             value="overview"
             className="text-sm h-10 bg-slate-100 text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm font-medium rounded-md"
@@ -830,7 +893,7 @@ export default function BranchDashboardPage() {
         {/* 통합 탭 */}
         <TabsContent value="overview" className="space-y-6">
           {/* 통합 현황 통계 */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div id="tour-overview-stats" className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <StatCard
               title="전체 회수대상"
               value={combinedStats.total.toLocaleString()}

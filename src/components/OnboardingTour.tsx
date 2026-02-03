@@ -9,7 +9,7 @@ export interface TourStep {
   title: string;
   content: string;
   position?: 'top' | 'bottom' | 'left' | 'right';
-  action?: 'click-waiting-tab' | 'click-collected-tab' | 'demo-collect' | 'demo-ship'; // 자동 실행할 액션
+  action?: 'click-waiting-tab' | 'click-collected-tab' | 'click-overview-tab' | 'click-material-tab' | 'demo-collect' | 'demo-ship'; // 자동 실행할 액션
   isInteractive?: boolean; // 사용자가 직접 클릭해야 하는 단계인지
   demoButtonText?: string; // 데모 버튼 텍스트
 }
