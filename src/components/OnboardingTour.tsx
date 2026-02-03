@@ -237,8 +237,8 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
   // Calculate tooltip position
   const getTooltipStyle = () => {
     const position = step.position || 'bottom';
-    const tooltipWidth = 420; // 넓게 변경 (320 → 420)
-    const tooltipHeight = step.isInteractive ? 320 : 240; // 높이도 증가
+    const tooltipWidth = 400; // 약간 줄임 (420 → 400)
+    const tooltipHeight = step.isInteractive ? 280 : 220; // 높이 감소 (320→280, 240→220)
 
     let top = 0;
     let left = 0;
@@ -267,13 +267,13 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
     }
 
     // 화면 밖으로 나가면 반대쪽이나 중앙으로 이동
-    const minMargin = 24;
+    const minMargin = 40; // 여유 공간 증가 (24 → 40)
     const maxTop = window.innerHeight - tooltipHeight - minMargin;
     const maxLeft = window.innerWidth - tooltipWidth - minMargin;
 
-    // 아래쪽으로 너무 내려가면 화면 중앙 위쪽으로 이동
+    // 아래쪽으로 너무 내려가면 위쪽으로 조정
     if (top > maxTop) {
-      top = Math.min(viewportCenterY - tooltipHeight / 2, maxTop);
+      top = maxTop;
     }
     // 위쪽으로 너무 올라가면 조정
     if (top < minMargin) {
@@ -333,7 +333,7 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
 
       {/* Tooltip - 크기 및 글씨 확대 */}
       <div
-        className="absolute bg-white rounded-2xl shadow-2xl p-6 animate-in fade-in slide-in-from-bottom-2 duration-300"
+        className="absolute bg-white rounded-2xl shadow-2xl p-5 animate-in fade-in slide-in-from-bottom-2 duration-300"
         style={tooltipStyle}
       >
         {/* Close button */}
@@ -364,16 +364,16 @@ export function OnboardingTour({ steps, storageKey, onComplete, onAction, onDemo
         </div>
 
         {/* Content - 글씨 크기 증가 */}
-        <h3 className="text-xl font-bold text-gray-900 mb-3">{step.title}</h3>
-        <p className="text-base text-gray-600 leading-relaxed mb-5 whitespace-pre-line">{step.content}</p>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">{step.title}</h3>
+        <p className="text-sm text-gray-600 leading-relaxed mb-4 whitespace-pre-line">{step.content}</p>
 
         {/* Interactive Demo Button */}
         {step.isInteractive && onDemoAction && (
-          <div className="mb-5 p-4 bg-blue-50 rounded-xl border-2 border-blue-200">
-            <p className="text-sm text-blue-700 mb-3 font-medium">👆 아래 버튼을 눌러 연습해보세요!</p>
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
+            <p className="text-xs text-blue-700 mb-2 font-medium">👆 아래 버튼을 눌러 연습해보세요!</p>
             <Button
-              size="lg"
-              className="w-full bg-green-600 hover:bg-green-700 text-base py-3"
+              size="sm"
+              className="w-full bg-green-600 hover:bg-green-700 text-sm py-2"
               onClick={handleDemoAction}
               disabled={isDemoLoading}
             >

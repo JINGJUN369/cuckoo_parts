@@ -94,77 +94,63 @@ const createTourSteps = (hasWaitingData: boolean, hasCollectedData: boolean): To
   steps.push({
     target: '#tour-stat-cards',
     title: '7단계: 자재 현황 확인',
-    content: '자재의 상태별 건수를 확인하세요.\n\n🔴 회수대기: 기사가 회수 예정\n🟠 발송대기: 회수 완료, 발송 필요 (⚠️ 긴급 건 강조)\n🔵 발송완료: 품질팀으로 발송됨\n⚫ 발송불가: 발송 불가능 사유',
+    content: '자재의 상태별 건수를 확인하세요.\n\n🔴 회수대기 🟠 발송대기 🔵 발송완료 ⚫ 발송불가',
     position: 'bottom',
   });
 
+  // 기사별 현황은 데이터가 있을 때만 표시
   steps.push({
-    target: '#tour-technician-stats',
-    title: '8단계: 기사별 현황',
-    content: '담당 기사별 회수 진행 상황입니다.\n\n📊 진행률 바: 완료/발송 비율\n🔴 대기가 많은 기사: 빨간색 배경 강조',
+    target: '#tour-stat-cards',
+    title: '8단계: 회수대기 탭으로 이동',
+    content: '이제 회수대기 목록을 확인해봅시다. 자동으로 탭을 이동합니다!',
     position: 'bottom',
-  });
-
-  steps.push({
-    target: '#tour-tab-waiting',
-    title: '9단계: 회수대기 → 회수완료',
-    content: '회수대기 탭에서 기사가 회수한 항목을 "회수완료" 처리합니다.\n\n자동으로 탭을 이동하겠습니다!',
-    position: 'top',
     action: 'click-waiting-tab',
   });
 
   steps.push({
     target: '#tour-action-info',
-    title: '10단계: 회수완료 처리 연습',
+    title: '9단계: 회수완료 처리',
     content: hasWaitingData
-      ? '기사가 부품을 회수하면 [회수완료] 버튼을 클릭합니다.\n\n아래 버튼으로 직접 연습해보세요! (실제 데이터 영향 없음)'
-      : '회수대기 건이 있으면 [회수완료] 버튼이 표시됩니다.\n클릭하면 "발송대기" 상태로 변경됩니다.',
+      ? '기사가 부품을 회수하면 [회수완료] 버튼을 클릭합니다.'
+      : '회수대기 건이 있으면 [회수완료] 버튼이 표시됩니다.',
     position: 'bottom',
     isInteractive: hasWaitingData,
     action: hasWaitingData ? 'demo-collect' : undefined,
-    demoButtonText: hasWaitingData ? '🎯 회수완료 클릭 연습하기' : undefined,
+    demoButtonText: hasWaitingData ? '🎯 회수완료 연습하기' : undefined,
   });
 
   steps.push({
     target: '#tour-tab-collected',
-    title: '11단계: 발송대기 → 발송',
-    content: '발송대기 탭에서 회수된 부품을 품질팀으로 발송합니다.\n\n탭을 이동합니다!',
+    title: '10단계: 발송대기 탭으로 이동',
+    content: '회수된 부품을 품질팀으로 발송합니다. 탭을 이동합니다!',
     position: 'top',
     action: 'click-collected-tab',
   });
 
   steps.push({
     target: '#tour-collected-table',
-    title: '12단계: 발송 처리 + 일괄 작업',
+    title: '11단계: 발송 처리',
     content: hasCollectedData
-      ? '✅ 체크박스: 여러 건 선택\n📦 [발송] 버튼: 운송회사 + 송장번호 입력\n🖨️ [내역출력]: 택배 동봉용 출력\n❌ [발송불가]: 불가 사유 등록\n\n아래 버튼으로 발송 처리를 연습해보세요!'
-      : '발송대기 건이 있으면:\n• 개별 [발송] 버튼\n• 체크박스로 여러 건 선택 후 일괄 발송\n• 발송내역 출력 (택배 동봉용)',
+      ? '✅ 체크박스로 여러 건 선택\n📦 [발송] 버튼: 송장번호 입력\n🖨️ [내역출력]: 택배 동봉용'
+      : '발송대기 건이 있으면 [발송] 버튼이 표시됩니다.',
     position: 'bottom',
     isInteractive: hasCollectedData,
     action: hasCollectedData ? 'demo-ship' : undefined,
-    demoButtonText: hasCollectedData ? '📦 발송 & 송장번호 입력 연습하기' : undefined,
+    demoButtonText: hasCollectedData ? '📦 발송 연습하기' : undefined,
   });
 
-  // === 제품 회수 (13단계) ===
+  // === 제품 및 마무리 (12-13단계) ===
   steps.push({
     target: '#tour-main-tabs',
-    title: '13단계: 제품 회수 관리',
-    content: '제품 탭도 자재와 동일한 방식으로 동작합니다.\n\n📦 제품 회수대기 → 회수완료 → 발송\n🏢 모델명별 자동 주소 분기:\n  • CBT-C/D/I/L → 나누텍\n  • CWC-A → 로보터스\n  • 기타 → 품질팀',
-    position: 'bottom',
-  });
-
-  // === 마무리 (14-15단계) ===
-  steps.push({
-    target: '#tour-print-button',
-    title: '14단계: 인쇄 기능 총정리',
-    content: '📄 인쇄 방법 4가지:\n\n1️⃣ 통합 인쇄: 자재+제품 모두\n2️⃣ 자재 인쇄: 자재만\n3️⃣ 제품 인쇄: 제품만\n4️⃣ 발송내역 출력: 체크박스 선택 후 "내역출력" 버튼 (택배 동봉용)',
+    title: '12단계: 제품 회수',
+    content: '제품 탭도 자재와 동일합니다.\n\n📦 회수대기 → 회수완료 → 발송',
     position: 'bottom',
   });
 
   steps.push({
     target: '#tour-welcome',
     title: '🎉 가이드 완료!',
-    content: '축하합니다! 이제 쿠쿠 회수관리 시스템을 사용할 준비가 되었습니다.\n\n✅ 기본 흐름: 회수대기 → 회수완료 → 발송\n📊 통합/자재/제품 탭 활용\n🖨️ 인쇄 기능 4가지\n❓ 궁금하면 우측 상단 "가이드 다시보기" 클릭',
+    content: '축하합니다! 이제 쿠쿠 회수관리 시스템을 사용할 준비가 되었습니다.\n\n✅ 회수대기 → 회수완료 → 발송\n📊 통합/자재/제품 탭 활용\n❓ 우측 상단 "가이드 다시보기" 클릭',
     position: 'bottom',
   });
 
