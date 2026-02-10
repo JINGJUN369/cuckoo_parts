@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { MaterialUsage, RecoveryStatus, ParsedExcelRow, RecoveryStats, CancelReason } from '@/types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { MaterialUsage, RecoveryStatus, ParsedExcelRow, RecoveryStats, CancelReason, RecoveryMaterial } from '@/types';
 import { supabase, DEFAULT_CARRIERS } from '@/lib/supabase/client';
 import { generateDuplicateKey } from '@/lib/excel';
 
@@ -42,11 +42,35 @@ export function useMaterialUsage() {
     loadData();
   }, [loadData]);
 
+  // Supabase Realtime 구독 (다른 사용자의 변경 자동 반영, 2초 쓰로틀)
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const channel = supabase
+      .channel('material_usage_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'material_usage' },
+        () => {
+          if (realtimeTimer.current) return;
+          realtimeTimer.current = setTimeout(() => {
+            loadData();
+            realtimeTimer.current = null;
+          }, 2000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+    };
+  }, [loadData]);
+
   // 데이터 추가 (엑셀 업로드용) - 회수대상만 저장
   const addData = useCallback(
     async (
       rows: ParsedExcelRow[],
-      recoveryMaterialCodes: Set<string>,
+      recoveryMaterials: RecoveryMaterial[],
       overwriteDuplicates: boolean = false
     ): Promise<UploadResult> => {
       const result: UploadResult = {
@@ -56,6 +80,10 @@ export function useMaterialUsage() {
         duplicate: 0,
         byDate: {},
       };
+
+      // 회수대상 자재 맵 생성 (코드 → 자재 정보)
+      const materialMap = new Map<string, RecoveryMaterial>();
+      recoveryMaterials.forEach(m => materialMap.set(m.material_code, m));
 
       // 기존 데이터의 키 Set 생성
       const existingKeys = new Set(
@@ -69,7 +97,23 @@ export function useMaterialUsage() {
 
       for (const row of rows) {
         const key = generateDuplicateKey(row);
-        const isRecoveryTarget = recoveryMaterialCodes.has(row.material_code);
+
+        // 회수대상 자재 확인 (자재코드 + 제조번호 범위)
+        const recoveryMaterial = materialMap.get(row.material_code);
+        let isRecoveryTarget = !!recoveryMaterial;
+
+        if (isRecoveryTarget && recoveryMaterial) {
+          const { serial_number_start, serial_number_end } = recoveryMaterial;
+          if (serial_number_start || serial_number_end) {
+            const serialNum = row.serial_number || '';
+            if (serial_number_start && serialNum < serial_number_start) {
+              isRecoveryTarget = false;
+            }
+            if (serial_number_end && serialNum > serial_number_end) {
+              isRecoveryTarget = false;
+            }
+          }
+        }
 
         // 처리날짜 추출 (process_time 기준)
         const processDate = row.process_time

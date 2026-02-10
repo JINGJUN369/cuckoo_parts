@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Search, History, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Search, History, Loader2, Edit2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,11 @@ export default function MaterialsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [manualCode, setManualCode] = useState('');
   const [manualName, setManualName] = useState('');
+  const [serialStart, setSerialStart] = useState('');
+  const [serialEnd, setSerialEnd] = useState('');
+  const [editingSerial, setEditingSerial] = useState<string | null>(null);
+  const [editSerialStart, setEditSerialStart] = useState('');
+  const [editSerialEnd, setEditSerialEnd] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState<{ code: string; name: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showManualAddModal, setShowManualAddModal] = useState(false);
@@ -44,7 +49,7 @@ export default function MaterialsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const { data } = useMaterialUsage();
-  const { materials, addMaterial, removeMaterial, getActiveMaterials, getHistory } = useRecoveryMaterials();
+  const { materials, addMaterial, removeMaterial, updateSerialRange, getActiveMaterials, getHistory } = useRecoveryMaterials();
   const { session } = useAuth();
 
   // 활성 회수대상 자재 목록
@@ -100,12 +105,20 @@ export default function MaterialsPage() {
 
     setIsProcessing(true);
     try {
-      const result = await addMaterial(selectedMaterial.code, selectedMaterial.name, session.userCode);
+      const result = await addMaterial(
+        selectedMaterial.code,
+        selectedMaterial.name,
+        session.userCode,
+        serialStart.trim() || undefined,
+        serialEnd.trim() || undefined
+      );
       if (result.success) {
         toast.success(result.message);
         setShowAddModal(false);
         setSelectedMaterial(null);
         setSearchTerm('');
+        setSerialStart('');
+        setSerialEnd('');
         loadHistory();
       } else {
         toast.error(result.message);
@@ -123,18 +136,48 @@ export default function MaterialsPage() {
 
     setIsProcessing(true);
     try {
-      const result = await addMaterial(manualCode.trim(), manualName.trim(), session.userCode);
+      const result = await addMaterial(
+        manualCode.trim(),
+        manualName.trim(),
+        session.userCode,
+        serialStart.trim() || undefined,
+        serialEnd.trim() || undefined
+      );
       if (result.success) {
         toast.success(result.message);
         setShowManualAddModal(false);
         setManualCode('');
         setManualName('');
+        setSerialStart('');
+        setSerialEnd('');
         loadHistory();
       } else {
         toast.error(result.message);
       }
     } catch (error) {
       toast.error('등록 중 오류가 발생했습니다.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 제조번호 범위 수정
+  const handleUpdateSerialRange = async (materialCode: string) => {
+    setIsProcessing(true);
+    try {
+      const result = await updateSerialRange(
+        materialCode,
+        editSerialStart.trim() || undefined,
+        editSerialEnd.trim() || undefined
+      );
+      if (result.success) {
+        toast.success(result.message);
+        setEditingSerial(null);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error('수정 중 오류가 발생했습니다.');
     } finally {
       setIsProcessing(false);
     }
@@ -272,16 +315,75 @@ export default function MaterialsPage() {
                     <TableRow>
                       <TableHead>자재코드</TableHead>
                       <TableHead>자재명</TableHead>
+                      <TableHead>제조번호 범위</TableHead>
                       <TableHead>등록자</TableHead>
                       <TableHead>등록일시</TableHead>
-                      <TableHead className="w-[100px]">액션</TableHead>
+                      <TableHead className="w-[140px]">액션</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {activeMaterials.map((m) => (
                       <TableRow key={m.id}>
                         <TableCell className="font-medium">{m.material_code}</TableCell>
-                        <TableCell className="max-w-[300px] truncate">{m.material_name}</TableCell>
+                        <TableCell className="max-w-[200px] truncate">{m.material_name}</TableCell>
+                        <TableCell>
+                          {editingSerial === m.material_code ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                placeholder="시작"
+                                value={editSerialStart}
+                                onChange={(e) => setEditSerialStart(e.target.value)}
+                                className="h-7 w-24 text-xs"
+                              />
+                              <span className="text-xs text-muted-foreground">~</span>
+                              <Input
+                                placeholder="끝"
+                                value={editSerialEnd}
+                                onChange={(e) => setEditSerialEnd(e.target.value)}
+                                className="h-7 w-24 text-xs"
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2"
+                                onClick={() => handleUpdateSerialRange(m.material_code)}
+                                disabled={isProcessing}
+                              >
+                                {isProcessing ? <Loader2 className="h-3 w-3 animate-spin" /> : '저장'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2"
+                                onClick={() => setEditingSerial(null)}
+                              >
+                                취소
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              {m.serial_number_start || m.serial_number_end ? (
+                                <span className="text-sm font-mono">
+                                  {m.serial_number_start || '∞'} ~ {m.serial_number_end || '∞'}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">전체</span>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 ml-1"
+                                onClick={() => {
+                                  setEditingSerial(m.material_code);
+                                  setEditSerialStart(m.serial_number_start || '');
+                                  setEditSerialEnd(m.serial_number_end || '');
+                                }}
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell>{m.created_by}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
                           {new Date(m.created_at).toLocaleString('ko-KR')}
@@ -376,13 +478,32 @@ export default function MaterialsPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedMaterial && (
-            <div className="py-4">
+            <div className="py-4 space-y-3">
               <p><strong>자재코드:</strong> {selectedMaterial.code}</p>
               <p><strong>자재명:</strong> {selectedMaterial.name}</p>
+              <div className="border-t pt-3">
+                <label className="text-sm font-medium">제조번호 범위 (선택)</label>
+                <p className="text-xs text-muted-foreground mb-2">미입력 시 해당 자재코드의 모든 제조번호가 회수대상</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="시작 제조번호"
+                    value={serialStart}
+                    onChange={(e) => setSerialStart(e.target.value)}
+                    className="flex-1"
+                  />
+                  <span className="text-muted-foreground">~</span>
+                  <Input
+                    placeholder="끝 제조번호"
+                    value={serialEnd}
+                    onChange={(e) => setSerialEnd(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddModal(false)} disabled={isProcessing}>
+            <Button variant="outline" onClick={() => { setShowAddModal(false); setSerialStart(''); setSerialEnd(''); }} disabled={isProcessing}>
               취소
             </Button>
             <Button onClick={handleAdd} disabled={isProcessing}>
@@ -419,9 +540,28 @@ export default function MaterialsPage() {
                 onChange={(e) => setManualName(e.target.value)}
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">제조번호 범위 (선택)</label>
+              <p className="text-xs text-muted-foreground">미입력 시 해당 자재코드의 모든 제조번호가 회수대상</p>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="시작 제조번호"
+                  value={serialStart}
+                  onChange={(e) => setSerialStart(e.target.value)}
+                  className="flex-1"
+                />
+                <span className="text-muted-foreground">~</span>
+                <Input
+                  placeholder="끝 제조번호"
+                  value={serialEnd}
+                  onChange={(e) => setSerialEnd(e.target.value)}
+                  className="flex-1"
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowManualAddModal(false)} disabled={isProcessing}>
+            <Button variant="outline" onClick={() => { setShowManualAddModal(false); setSerialStart(''); setSerialEnd(''); }} disabled={isProcessing}>
               취소
             </Button>
             <Button onClick={handleManualAdd} disabled={isProcessing || !manualCode.trim()}>

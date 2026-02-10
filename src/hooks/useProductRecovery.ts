@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ProductRecovery,
   ProductRecoveryType,
@@ -123,6 +123,30 @@ export function useProductRecovery() {
     loadAutoRecoveryConfig();
     loadData();
   }, [loadAutoRecoveryConfig, loadData]);
+
+  // Supabase Realtime 구독 (다른 사용자의 변경 자동 반영, 2초 쓰로틀)
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const channel = supabase
+      .channel('product_recovery_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'product_recovery' },
+        () => {
+          if (realtimeTimer.current) return;
+          realtimeTimer.current = setTimeout(() => {
+            loadData();
+            realtimeTimer.current = null;
+          }, 2000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+    };
+  }, [loadData]);
 
   // 철거 데이터 파싱 및 업로드
   const uploadRemovalData = useCallback(

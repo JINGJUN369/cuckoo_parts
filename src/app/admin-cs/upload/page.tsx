@@ -235,8 +235,8 @@ export default function UploadPage() {
   const handleMaterialUpload = useCallback(async (overwrite: boolean = false) => {
     if (materialParsedData.length === 0) return;
 
-    const materialCodes = getMaterialCodes();
-    if (materialCodes.size === 0) {
+    const activeMaterials = getActiveMaterials();
+    if (activeMaterials.length === 0) {
       toast.error('먼저 회수대상 자재를 설정해주세요. (자재 설정 메뉴)');
       return;
     }
@@ -254,7 +254,7 @@ export default function UploadPage() {
       setMaterialUploadStatus('데이터 필터링 및 저장 중...');
       setMaterialUploadProgress(30);
 
-      const result = await addMaterialData(materialParsedData, materialCodes, overwrite);
+      const result = await addMaterialData(materialParsedData, activeMaterials, overwrite);
 
       setMaterialUploadProgress(80);
       setMaterialUploadStatus('이력 저장 중...');
@@ -285,7 +285,7 @@ export default function UploadPage() {
       setMaterialUploadStatus('');
       setMaterialUploadProgress(0);
     }
-  }, [materialParsedData, getMaterialCodes, addMaterialData, materialFile, session]);
+  }, [materialParsedData, getActiveMaterials, addMaterialData, materialFile, session]);
 
   const handleMaterialUploadClick = useCallback(async () => {
     if (materialParsedData.length === 0 || isMaterialUploading) return;
@@ -580,7 +580,14 @@ export default function UploadPage() {
                     </TableHeader>
                     <TableBody>
                       {materialParsedData.slice(0, 50).map((row, index) => {
-                        const isRecoveryTarget = getMaterialCodes().has(row.material_code);
+                        const activeMats = getActiveMaterials();
+                        const mat = activeMats.find(m => m.material_code === row.material_code);
+                        let isRecoveryTarget = !!mat;
+                        if (mat && (mat.serial_number_start || mat.serial_number_end)) {
+                          const sn = row.serial_number || '';
+                          if (mat.serial_number_start && sn < mat.serial_number_start) isRecoveryTarget = false;
+                          if (mat.serial_number_end && sn > mat.serial_number_end) isRecoveryTarget = false;
+                        }
                         return (
                           <TableRow key={index} className={isRecoveryTarget ? '' : 'bg-orange-50 text-orange-700'}>
                             <TableCell className="font-medium">{row.request_number}</TableCell>

@@ -38,8 +38,8 @@ export function PasswordChangeModal({
     e.preventDefault();
     setError(null);
 
-    if (newPassword.length < 4) {
-      setError('비밀번호는 4자 이상이어야 합니다.');
+    if (newPassword.length < 8) {
+      setError('비밀번호는 8자 이상이어야 합니다.');
       return;
     }
 
@@ -87,7 +87,7 @@ export function PasswordChangeModal({
               <Input
                 id="newPassword"
                 type={showNewPassword ? 'text' : 'password'}
-                placeholder="4자 이상 입력"
+                placeholder="8자 이상 입력"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={isLoading}

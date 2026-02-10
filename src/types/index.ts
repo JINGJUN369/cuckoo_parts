@@ -70,6 +70,8 @@ export interface RecoveryMaterial {
   id: string;
   material_code: string;
   material_name?: string;
+  serial_number_start?: string;
+  serial_number_end?: string;
   is_active: boolean;
   created_at: string;
   created_by?: string;

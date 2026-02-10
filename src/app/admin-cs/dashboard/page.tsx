@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { Package, TruckIcon, PackageCheck, Clock, Search, ChevronLeft, Mail, Calendar, XCircle, Truck, ArrowUpRight } from 'lucide-react';
+import { Package, TruckIcon, PackageCheck, Clock, Search, ChevronLeft, Mail, Calendar, XCircle, Truck, ArrowUpRight, Copy, FileText } from 'lucide-react';
 import { StatCard } from '@/components/common/StatCard';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
@@ -131,17 +131,10 @@ export default function AdminCSDashboardPage() {
   const [isSearched, setIsSearched] = useState(false);
   const [branchSelectedPreset, setBranchSelectedPreset] = useState<DatePreset | null>(null);
 
-  // 이메일 모달 상태
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [emailRecipients, setEmailRecipients] = useState<string[]>([]);
-  const [emailSubject, setEmailSubject] = useState('');
-  const [emailMessage, setEmailMessage] = useState('');
+  // 리포트 팝업 상태
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportText, setReportText] = useState('');
   const [availableUsers, setAvailableUsers] = useState<{ user_code: string; email: string; branch_code?: string }[]>([]);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-
-  // 법인별 개별 발송 상태
-  const [showBranchEmailModal, setShowBranchEmailModal] = useState(false);
-  const [isSendingBranchEmail, setIsSendingBranchEmail] = useState(false);
 
   // 초기 날짜 설정 (최근 30일)
   useEffect(() => {
@@ -685,6 +678,75 @@ export default function AdminCSDashboardPage() {
     return branchEmails;
   }, [availableUsers]);
 
+  // 전체 법인별 리포트 문구 생성
+  const generateAllBranchReport = useCallback(() => {
+    const dateRange = isMainSearched
+      ? `${appliedMainDateFrom} ~ ${appliedMainDateTo}`
+      : '전체 기간';
+    const now = new Date().toLocaleString('ko-KR');
+
+    let text = `[쿠쿠 회수 현황 리포트]\n`;
+    text += `조회 기간: ${dateRange}\n`;
+    text += `생성 일시: ${now}\n`;
+    text += `${'='.repeat(40)}\n\n`;
+
+    // 통합 현황 요약
+    text += `[전체 요약]\n`;
+    text += `자재: ${filteredMaterialStats.total}건 / 제품: ${filteredProductStats.total}건\n`;
+    text += `회수대기: ${filteredCombinedStats.waiting} | 회수완료: ${filteredCombinedStats.collected} | 발송: ${filteredCombinedStats.shipped} | 입고완료: ${filteredCombinedStats.received} | 발송불가: ${filteredCombinedStats.cancelled}\n\n`;
+
+    // 법인별 상세
+    text += `[법인별 현황]\n`;
+    text += `${'─'.repeat(40)}\n`;
+
+    combinedBranchStats.forEach((branch) => {
+      text += `${branch.branch} (자재:${branch.materialCount} / 제품:${branch.productCount})\n`;
+      text += `  대기:${branch.waiting} / 완료:${branch.collected} / 발송:${branch.shipped} / 입고:${branch.received} / 불가:${branch.cancelled}\n`;
+    });
+
+    return text;
+  }, [isMainSearched, appliedMainDateFrom, appliedMainDateTo, filteredMaterialStats, filteredProductStats, filteredCombinedStats, combinedBranchStats]);
+
+  // 개별 법인 리포트 생성
+  const generateBranchReport = useCallback(() => {
+    if (!selectedBranch) return '';
+    const dateRange = isSearched
+      ? `${appliedDateFrom} ~ ${appliedDateTo}`
+      : '전체 기간';
+    const now = new Date().toLocaleString('ko-KR');
+    const isProduct = branchViewType === 'product';
+    const stats = isProduct ? searchProductStats : searchMaterialStats;
+
+    let text = `[${selectedBranch}] ${isProduct ? '제품' : '자재'} 회수 현황\n`;
+    text += `조회 기간: ${dateRange}\n`;
+    text += `생성 일시: ${now}\n`;
+    text += `${'─'.repeat(30)}\n`;
+    text += `전체: ${stats.total}건\n`;
+    text += `회수대기: ${stats.waiting}건\n`;
+    text += `회수완료: ${stats.collected}건\n`;
+    text += `발송: ${stats.shipped}건\n`;
+    text += `발송불가: ${stats.cancelled}건\n`;
+
+    return text;
+  }, [selectedBranch, isSearched, appliedDateFrom, appliedDateTo, branchViewType, searchProductStats, searchMaterialStats]);
+
+  // 클립보드 복사
+  const handleCopyReport = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('클립보드에 복사되었습니다.');
+    } catch {
+      toast.error('복사에 실패했습니다.');
+    }
+  };
+
+  // 리포트 팝업 열기
+  const handleOpenReport = (type: 'all' | 'branch') => {
+    const text = type === 'all' ? generateAllBranchReport() : generateBranchReport();
+    setReportText(text);
+    setShowReportModal(true);
+  };
+
   // 날짜 필터 컴포넌트
   const DateFilterCard = () => (
     <Card>
@@ -746,13 +808,16 @@ export default function AdminCSDashboardPage() {
           <Button variant="ghost" onClick={() => setSelectedBranch(null)}>
             <ChevronLeft className="h-4 w-4 mr-1" />돌아가기
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold flex items-center gap-2">
               법인 상세 현황: {selectedBranch}
               <Badge variant={isProduct ? 'secondary' : 'default'}>{isProduct ? '제품' : '자재'}</Badge>
             </h1>
             <p className="text-muted-foreground">관리자 모드 - 상태 강제 변경 가능</p>
           </div>
+          <Button variant="outline" onClick={() => handleOpenReport('branch')}>
+            <FileText className="h-4 w-4 mr-2" />리포트 복사
+          </Button>
         </div>
 
         {/* 법인 전체 통계 */}
@@ -1089,7 +1154,12 @@ export default function AdminCSDashboardPage() {
 
           {/* 통합 법인별 현황 테이블 */}
           <Card>
-            <CardHeader><CardTitle className="text-lg">법인별 현황 (자재 + 제품)</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg">법인별 현황 (자재 + 제품)</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => handleOpenReport('all')}>
+                <FileText className="h-4 w-4 mr-2" />리포트 복사
+              </Button>
+            </CardHeader>
             <CardContent>
               {combinedBranchStats.length > 0 ? (
                 <Table>
@@ -1333,6 +1403,35 @@ export default function AdminCSDashboardPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 리포트 팝업 모달 */}
+      <Dialog open={showReportModal} onOpenChange={setShowReportModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              회수 현황 리포트
+            </DialogTitle>
+            <DialogDescription>
+              아래 문구를 복사하여 메신저에 붙여넣기 하세요.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={reportText}
+            readOnly
+            className="min-h-[300px] font-mono text-sm"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReportModal(false)}>
+              닫기
+            </Button>
+            <Button onClick={() => handleCopyReport(reportText)}>
+              <Copy className="h-4 w-4 mr-2" />
+              클립보드 복사
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

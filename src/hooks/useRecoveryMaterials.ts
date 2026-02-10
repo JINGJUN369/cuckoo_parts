@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { RecoveryMaterial, RecoveryMaterialHistory } from '@/types';
 import { supabase } from '@/lib/supabase/client';
 
@@ -33,9 +33,33 @@ export function useRecoveryMaterials() {
     loadData();
   }, [loadData]);
 
+  // Supabase Realtime 구독 (다른 사용자의 변경 자동 반영, 2초 쓰로틀)
+  const realtimeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const channel = supabase
+      .channel('recovery_materials_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'recovery_materials' },
+        () => {
+          if (realtimeTimer.current) return;
+          realtimeTimer.current = setTimeout(() => {
+            loadData();
+            realtimeTimer.current = null;
+          }, 2000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (realtimeTimer.current) clearTimeout(realtimeTimer.current);
+    };
+  }, [loadData]);
+
   // 회수대상 자재 등록
   const addMaterial = useCallback(
-    async (materialCode: string, materialName: string, userCode: string) => {
+    async (materialCode: string, materialName: string, userCode: string, serialStart?: string, serialEnd?: string) => {
       try {
         // 기존 자재 확인
         const existing = materials.find((m) => m.material_code === materialCode);
@@ -49,6 +73,8 @@ export function useRecoveryMaterials() {
                 is_active: true,
                 deactivated_at: null,
                 deactivated_by: null,
+                serial_number_start: serialStart || null,
+                serial_number_end: serialEnd || null,
               })
               .eq('material_code', materialCode);
 
@@ -73,6 +99,8 @@ export function useRecoveryMaterials() {
         const { error } = await supabase.from('recovery_materials').insert({
           material_code: materialCode,
           material_name: materialName,
+          serial_number_start: serialStart || null,
+          serial_number_end: serialEnd || null,
           is_active: true,
           created_by: userCode,
         });
@@ -96,6 +124,29 @@ export function useRecoveryMaterials() {
       }
     },
     [materials, loadData]
+  );
+
+  // 제조번호 범위 수정
+  const updateSerialRange = useCallback(
+    async (materialCode: string, serialStart?: string, serialEnd?: string) => {
+      try {
+        const { error } = await supabase
+          .from('recovery_materials')
+          .update({
+            serial_number_start: serialStart || null,
+            serial_number_end: serialEnd || null,
+          })
+          .eq('material_code', materialCode);
+
+        if (error) throw error;
+        await loadData();
+        return { success: true, message: '제조번호 범위가 수정되었습니다.' };
+      } catch (error) {
+        console.error('Error updating serial range:', error);
+        return { success: false, message: '수정 중 오류가 발생했습니다.' };
+      }
+    },
+    [loadData]
   );
 
   // 회수대상 자재 해제
@@ -179,6 +230,7 @@ export function useRecoveryMaterials() {
     isLoading,
     addMaterial,
     removeMaterial,
+    updateSerialRange,
     getActiveMaterials,
     getMaterialCodes,
     getHistory,

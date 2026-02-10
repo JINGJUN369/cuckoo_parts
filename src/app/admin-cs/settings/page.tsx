@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Settings, Mail, Save, Eye, EyeOff, TestTube, Database, Trash2, Download, AlertTriangle } from 'lucide-react';
+import { Settings, Mail, Save, Eye, EyeOff, TestTube, Database, Trash2, Download, AlertTriangle, Package } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import {
   AlertTitle,
 } from '@/components/ui/alert';
 import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
@@ -33,6 +34,7 @@ interface SystemSetting {
 }
 
 export default function AdminSettingsPage() {
+  const { session } = useAuth();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,6 +43,7 @@ export default function AdminSettingsPage() {
   const [testEmail, setTestEmail] = useState('');
 
   // 데이터 관리 상태
+  const [dataType, setDataType] = useState<'material_usage' | 'product_recovery'>('material_usage');
   const [deleteFromDate, setDeleteFromDate] = useState('');
   const [deleteToDate, setDeleteToDate] = useState('');
   const [dataToDelete, setDataToDelete] = useState<any[]>([]);
@@ -120,7 +123,10 @@ export default function AdminSettingsPage() {
     try {
       const response = await fetch('/api/send-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-code': session?.userCode || '',
+        },
         body: JSON.stringify({
           recipients: [testEmail],
           subject: '[테스트] 부품회수시스템 이메일 테스트',
@@ -163,7 +169,7 @@ export default function AdminSettingsPage() {
     setIsLoadingPreview(true);
     try {
       const { data, error } = await supabase
-        .from('material_usage')
+        .from(dataType)
         .select('*')
         .gte('created_at', `${deleteFromDate}T00:00:00`)
         .lte('created_at', `${deleteToDate}T23:59:59`);
@@ -193,51 +199,55 @@ export default function AdminSettingsPage() {
 
     try {
       // 엑셀 데이터 준비
-      const excelData = dataToDelete.map(item => ({
-        '요청번호': item.request_number || '',
-        '이관처(법인)': item.branch_code || '',
-        '기사코드': item.technician_code || '',
-        '자재코드': item.material_code || '',
-        '자재명': item.material_name || '',
-        '수량': item.quantity || 1,
-        '상태': item.status || '',
-        '처리일시': item.process_time || '',
-        '입고일시': item.receipt_time || '',
-        '회수일시': item.collected_at || '',
-        '발송일시': item.shipped_at || '',
-        '입고완료일시': item.received_at || '',
-        '운송회사': item.carrier_name || '',
-        '송장번호': item.tracking_number || '',
-        '생성일시': item.created_at || '',
-      }));
+      let excelData;
+      let fileName: string;
+
+      if (dataType === 'material_usage') {
+        excelData = dataToDelete.map(item => ({
+          '요청번호': item.request_number || '',
+          '이관처(법인)': item.branch_code || '',
+          '기사코드': item.technician_code || '',
+          '자재코드': item.material_code || '',
+          '자재명': item.material_name || '',
+          '수량': item.quantity || 1,
+          '상태': item.status || '',
+          '처리일시': item.process_time || '',
+          '입고일시': item.receipt_time || '',
+          '회수일시': item.collected_at || '',
+          '발송일시': item.shipped_at || '',
+          '입고완료일시': item.received_at || '',
+          '운송회사': item.carrier_name || '',
+          '송장번호': item.tracking_number || '',
+          '생성일시': item.created_at || '',
+        }));
+        fileName = `부품회수_백업_${deleteFromDate}_${deleteToDate}_${dataToDelete.length}건.xlsx`;
+      } else {
+        excelData = dataToDelete.map(item => ({
+          '요청일자': item.request_date || '',
+          '요청지점': item.request_branch || '',
+          '고객번호': item.customer_number || '',
+          '고객명': item.customer_name || '',
+          '모델명': item.model_name || '',
+          '회수유형': item.recovery_type || '',
+          '법인코드': item.branch_code || '',
+          '사원번호': item.employee_number || '',
+          '회수상태': item.recovery_status || '',
+          '품의진행상태': item.approval_status || '',
+          '자동선택': item.is_auto_selected ? 'Y' : 'N',
+          '운송회사': item.carrier || '',
+          '송장번호': item.tracking_number || '',
+          '회수완료일': item.collected_at || '',
+          '발송일': item.shipped_at || '',
+          '입고완료일': item.received_at || '',
+          '생성일시': item.created_at || '',
+        }));
+        fileName = `제품회수_백업_${deleteFromDate}_${deleteToDate}_${dataToDelete.length}건.xlsx`;
+      }
 
       // 워크북 생성
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(excelData);
-
-      // 컬럼 너비 설정
-      ws['!cols'] = [
-        { wch: 15 }, // 요청번호
-        { wch: 12 }, // 이관처
-        { wch: 12 }, // 기사코드
-        { wch: 15 }, // 자재코드
-        { wch: 30 }, // 자재명
-        { wch: 8 },  // 수량
-        { wch: 10 }, // 상태
-        { wch: 20 }, // 처리일시
-        { wch: 20 }, // 입고일시
-        { wch: 20 }, // 회수일시
-        { wch: 20 }, // 발송일시
-        { wch: 20 }, // 입고완료일시
-        { wch: 15 }, // 운송회사
-        { wch: 20 }, // 송장번호
-        { wch: 20 }, // 생성일시
-      ];
-
       XLSX.utils.book_append_sheet(wb, ws, '백업데이터');
-
-      // 파일명 생성
-      const fileName = `부품회수_백업_${deleteFromDate}_${deleteToDate}_${dataToDelete.length}건.xlsx`;
 
       // 다운로드
       XLSX.writeFile(wb, fileName);
@@ -248,7 +258,7 @@ export default function AdminSettingsPage() {
     }
   };
 
-  // 데이터 삭제 실행
+  // 데이터 삭제 실행 (서버 API - 자동 백업 후 삭제)
   const handleDeleteData = async () => {
     if (deleteConfirmText !== '삭제확인') {
       toast.error('"삭제확인"을 정확히 입력해주세요.');
@@ -257,15 +267,27 @@ export default function AdminSettingsPage() {
 
     setIsDeleting(true);
     try {
-      const { error } = await supabase
-        .from('material_usage')
-        .delete()
-        .gte('created_at', `${deleteFromDate}T00:00:00`)
-        .lte('created_at', `${deleteToDate}T23:59:59`);
+      const response = await fetch('/api/data-management', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-code': session?.userCode || '',
+        },
+        body: JSON.stringify({
+          tableName: dataType,
+          dateFrom: deleteFromDate,
+          dateTo: deleteToDate,
+        }),
+      });
 
-      if (error) throw error;
+      const data = await response.json();
 
-      toast.success(`${dataToDelete.length}건의 데이터가 삭제되었습니다.`);
+      if (!data.success) {
+        toast.error(data.error || '데이터 삭제에 실패했습니다.');
+        return;
+      }
+
+      toast.success(data.message);
       setShowDeleteConfirm(false);
       setDataToDelete([]);
       setDeleteConfirmText('');
@@ -290,7 +312,8 @@ export default function AdminSettingsPage() {
     };
 
     dataToDelete.forEach(item => {
-      switch (item.status) {
+      const statusField = dataType === 'material_usage' ? item.status : item.recovery_status;
+      switch (statusField) {
         case '회수대기': stats.waiting++; break;
         case '회수완료': stats.collected++; break;
         case '발송': stats.shipped++; break;
@@ -299,7 +322,7 @@ export default function AdminSettingsPage() {
     });
 
     return stats;
-  }, [dataToDelete]);
+  }, [dataToDelete, dataType]);
 
   if (isLoading) {
     return (
@@ -470,9 +493,32 @@ export default function AdminSettingsPage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>주의</AlertTitle>
             <AlertDescription>
-              데이터 삭제는 복구할 수 없습니다. 삭제 전 반드시 백업을 다운로드해주세요.
+              데이터 삭제 시 서버에 자동 백업됩니다. 추가로 엑셀 백업 다운로드를 권장합니다.
             </AlertDescription>
           </Alert>
+
+          {/* 데이터 유형 선택 */}
+          <div className="space-y-2">
+            <Label>데이터 유형</Label>
+            <div className="flex gap-2">
+              <Button
+                variant={dataType === 'material_usage' ? 'default' : 'outline'}
+                onClick={() => { setDataType('material_usage'); setDataToDelete([]); }}
+                className="flex-1"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                부품 (자재)
+              </Button>
+              <Button
+                variant={dataType === 'product_recovery' ? 'default' : 'outline'}
+                onClick={() => { setDataType('product_recovery'); setDataToDelete([]); }}
+                className="flex-1"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                제품 (철거/불량교환)
+              </Button>
+            </div>
+          </div>
 
           {/* 기간 선택 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -570,15 +616,16 @@ export default function AdminSettingsPage() {
               데이터 삭제 확인
             </DialogTitle>
             <DialogDescription>
-              이 작업은 되돌릴 수 없습니다. 정말 삭제하시겠습니까?
+              삭제 전 서버에 자동 백업됩니다. 정말 삭제하시겠습니까?
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="p-4 rounded-lg bg-red-50 border border-red-200">
               <p className="text-sm text-red-700">
+                <strong>[{dataType === 'material_usage' ? '부품' : '제품'}]</strong>{' '}
                 <strong>{deleteFromDate}</strong> ~ <strong>{deleteToDate}</strong> 기간의<br />
-                총 <strong>{dataToDelete.length}건</strong>의 데이터가 영구적으로 삭제됩니다.
+                총 <strong>{dataToDelete.length}건</strong>의 데이터가 삭제됩니다. (서버 백업 보관)
               </p>
             </div>
 

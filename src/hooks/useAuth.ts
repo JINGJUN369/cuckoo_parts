@@ -4,18 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { UserSession, UserType } from '@/types';
 import { supabase, STORAGE_KEYS } from '@/lib/supabase/client';
 
-// 로그인 키워드 매핑
-const AUTH_MAP: Record<string, { type: UserType; redirect: string }> = {
-  '고객만족팀CS': { type: 'admin_cs', redirect: '/admin-cs/dashboard' },
-  'CUCKOO품질팀': { type: 'admin_quality', redirect: '/admin-quality/dashboard' },
-};
-
-// 관리자 초기 비밀번호
-const ADMIN_DEFAULT_PASSWORD = '12345678';
-
-// 설치법인 코드 패턴 (SA01, SA02, ... 또는 다른 패턴)
-const BRANCH_CODE_PATTERN = /^[A-Z]{2}\d{2}$/;
-
 export interface LoginResult {
   success: boolean;
   redirect?: string;
@@ -23,10 +11,89 @@ export interface LoginResult {
   requirePasswordChange?: boolean;
 }
 
+// 세션 만료 설정
+const SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8시간
+const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30분 비활성
+
 export function useAuth() {
   const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [requirePasswordChange, setRequirePasswordChange] = useState(false);
+
+  // 세션 만료 확인
+  const isSessionExpired = useCallback((sessionData: UserSession & { isDefaultPassword?: boolean; lastActivity?: string }) => {
+    const now = Date.now();
+
+    // 로그인 후 8시간 초과
+    if (sessionData.loginAt) {
+      const loginTime = new Date(sessionData.loginAt).getTime();
+      if (now - loginTime > SESSION_MAX_AGE_MS) return true;
+    }
+
+    // 마지막 활동 후 30분 초과
+    if (sessionData.lastActivity) {
+      const lastActivity = new Date(sessionData.lastActivity).getTime();
+      if (now - lastActivity > SESSION_IDLE_TIMEOUT_MS) return true;
+    }
+
+    return false;
+  }, []);
+
+  // 활동 시간 갱신
+  const updateLastActivity = useCallback(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.SESSION);
+    if (stored) {
+      try {
+        const sessionData = JSON.parse(stored);
+        sessionData.lastActivity = new Date().toISOString();
+        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(sessionData));
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  // 사용자 활동 감지 (클릭, 키보드, 스크롤)
+  useEffect(() => {
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const handleActivity = () => {
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(() => {
+        updateLastActivity();
+        throttleTimer = null;
+      }, 60000); // 1분마다 갱신 (성능 보호)
+    };
+
+    events.forEach(event => window.addEventListener(event, handleActivity));
+    return () => {
+      events.forEach(event => window.removeEventListener(event, handleActivity));
+      if (throttleTimer) clearTimeout(throttleTimer);
+    };
+  }, [updateLastActivity]);
+
+  // 세션 만료 주기적 확인 (1분마다)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const stored = localStorage.getItem(STORAGE_KEYS.SESSION);
+      if (stored) {
+        try {
+          const sessionData = JSON.parse(stored);
+          if (isSessionExpired(sessionData)) {
+            localStorage.removeItem(STORAGE_KEYS.SESSION);
+            setSession(null);
+            setRequirePasswordChange(false);
+            window.location.href = '/login';
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [isSessionExpired]);
 
   // 세션 로드
   useEffect(() => {
@@ -34,206 +101,129 @@ export function useAuth() {
     if (stored) {
       try {
         const parsedSession = JSON.parse(stored);
+
+        // 만료된 세션이면 제거
+        if (isSessionExpired(parsedSession)) {
+          localStorage.removeItem(STORAGE_KEYS.SESSION);
+          setIsLoading(false);
+          return;
+        }
+
         setSession(parsedSession);
-        // 비밀번호 변경 필요 여부 확인
         if (parsedSession.isDefaultPassword) {
           setRequirePasswordChange(true);
         }
+
+        // 활동 시간 갱신
+        updateLastActivity();
       } catch {
         localStorage.removeItem(STORAGE_KEYS.SESSION);
       }
     }
     setIsLoading(false);
-  }, []);
+  }, [isSessionExpired, updateLastActivity]);
 
-  // 로그인
+  // 로그인 (서버 API 호출 - bcrypt 비교)
   const login = useCallback(async (userCode: string, password: string): Promise<LoginResult> => {
-    const trimmedCode = userCode.trim();
-    const trimmedPassword = password.trim();
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userCode, password }),
+      });
 
-    if (!trimmedCode) {
-      return { success: false, error: '아이디를 입력해주세요.' };
-    }
+      const data = await response.json();
 
-    if (!trimmedPassword) {
-      return { success: false, error: '비밀번호를 입력해주세요.' };
-    }
-
-    let userType: UserType;
-    let redirect: string;
-    let branchCode: string | undefined;
-    let isDefaultPassword = false;
-
-    // Supabase에서 사용자 확인
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('user_code', trimmedCode)
-      .single();
-
-    if (userError || !user) {
-      // 사용자가 없는 경우 - 설치법인 코드이면 자동 생성
-      if (BRANCH_CODE_PATTERN.test(trimmedCode)) {
-        // 초기 비밀번호로 로그인 시도
-        if (trimmedPassword === trimmedCode) {
-          // 사용자 자동 생성
-          const { error: insertError } = await supabase.from('users').insert({
-            user_code: trimmedCode,
-            user_type: 'branch',
-            password_hash: trimmedCode,
-            is_default_password: true,
-            branch_code: trimmedCode,
-          });
-
-          if (insertError) {
-            console.error('User creation error:', insertError);
-          }
-
-          userType = 'branch';
-          branchCode = trimmedCode;
-          redirect = '/branch/dashboard';
-          isDefaultPassword = true;
-        } else {
-          return { success: false, error: '비밀번호가 일치하지 않습니다.' };
-        }
-      } else if (AUTH_MAP[trimmedCode]) {
-        // 관리자 계정 - 초기 비밀번호로 로그인 시도
-        if (trimmedPassword === ADMIN_DEFAULT_PASSWORD) {
-          // 사용자 자동 생성
-          const { error: insertError } = await supabase.from('users').insert({
-            user_code: trimmedCode,
-            user_type: AUTH_MAP[trimmedCode].type,
-            password_hash: ADMIN_DEFAULT_PASSWORD,
-            is_default_password: true,
-          });
-
-          if (insertError) {
-            console.error('User creation error:', insertError);
-          }
-
-          userType = AUTH_MAP[trimmedCode].type;
-          redirect = AUTH_MAP[trimmedCode].redirect;
-          isDefaultPassword = true;
-        } else {
-          return { success: false, error: '비밀번호가 일치하지 않습니다.' };
-        }
-      } else {
-        return { success: false, error: '등록되지 않은 사용자입니다.' };
-      }
-    } else {
-      // 사용자가 있는 경우 - 비밀번호 확인
-      if (user.password_hash !== trimmedPassword) {
-        return { success: false, error: '비밀번호가 일치하지 않습니다.' };
+      if (!data.success) {
+        return { success: false, error: data.error };
       }
 
-      if (!user.is_active) {
-        return { success: false, error: '비활성화된 계정입니다.' };
+      // 세션 저장 (활동 시간 초기화)
+      const sessionWithActivity = { ...data.session, lastActivity: new Date().toISOString() };
+      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(sessionWithActivity));
+      setSession(sessionWithActivity);
+
+      if (data.requirePasswordChange) {
+        setRequirePasswordChange(true);
       }
 
-      userType = user.user_type as UserType;
-      branchCode = user.branch_code;
-      isDefaultPassword = user.is_default_password;
-
-      // redirect 설정
-      if (userType === 'admin_cs') {
-        redirect = '/admin-cs/dashboard';
-      } else if (userType === 'admin_quality') {
-        redirect = '/admin-quality/dashboard';
-      } else {
-        redirect = '/branch/dashboard';
-      }
-
-      // 마지막 로그인 시간 업데이트
-      await supabase
-        .from('users')
-        .update({ last_login_at: new Date().toISOString() })
-        .eq('user_code', trimmedCode);
+      return {
+        success: true,
+        redirect: data.redirect,
+        requirePasswordChange: data.requirePasswordChange,
+      };
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: '로그인 처리 중 오류가 발생했습니다.' };
     }
-
-    const newSession: UserSession & { isDefaultPassword?: boolean } = {
-      userCode: trimmedCode,
-      userType,
-      branchCode,
-      loginAt: new Date().toISOString(),
-      isDefaultPassword,
-    };
-
-    // 세션 저장
-    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(newSession));
-    setSession(newSession);
-
-    if (isDefaultPassword) {
-      setRequirePasswordChange(true);
-    }
-
-    // 로그인 이력 저장 (Supabase)
-    await saveLoginHistory(newSession);
-
-    return {
-      success: true,
-      redirect,
-      requirePasswordChange: isDefaultPassword,
-    };
   }, []);
 
-  // 비밀번호 변경
+  // 비밀번호 변경 (서버 API 호출 - bcrypt 해싱)
   const changePassword = useCallback(async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
     if (!session) {
       return { success: false, error: '로그인이 필요합니다.' };
     }
 
-    if (newPassword.length < 4) {
-      return { success: false, error: '비밀번호는 4자 이상이어야 합니다.' };
+    if (newPassword.length < 8) {
+      return { success: false, error: '비밀번호는 8자 이상이어야 합니다.' };
     }
 
-    const { error } = await supabase
-      .from('users')
-      .update({
-        password_hash: newPassword,
-        is_default_password: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_code', session.userCode);
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-code': session.userCode,
+        },
+        body: JSON.stringify({ userCode: session.userCode, newPassword }),
+      });
 
-    if (error) {
+      const data = await response.json();
+
+      if (!data.success) {
+        return { success: false, error: data.error };
+      }
+
+      // 세션 업데이트
+      const updatedSession = { ...session, isDefaultPassword: false };
+      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(updatedSession));
+      setSession(updatedSession as UserSession);
+      setRequirePasswordChange(false);
+
+      return { success: true };
+    } catch (error) {
       console.error('Password change error:', error);
       return { success: false, error: '비밀번호 변경 중 오류가 발생했습니다.' };
     }
-
-    // 세션 업데이트
-    const updatedSession = { ...session, isDefaultPassword: false };
-    localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(updatedSession));
-    setSession(updatedSession as UserSession);
-    setRequirePasswordChange(false);
-
-    return { success: true };
   }, [session]);
 
-  // 비밀번호 초기화 (관리자 전용)
+  // 비밀번호 초기화 (관리자 전용, 서버 API 호출)
   const resetPassword = useCallback(async (targetUserCode: string): Promise<{ success: boolean; error?: string }> => {
     if (!session || session.userType !== 'admin_cs') {
       return { success: false, error: '권한이 없습니다.' };
     }
 
-    // 관리자 계정은 12345678로, 설치법인은 ID로 초기화
-    const isAdminAccount = AUTH_MAP[targetUserCode] !== undefined;
-    const newPassword = isAdminAccount ? ADMIN_DEFAULT_PASSWORD : targetUserCode;
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-code': session.userCode,
+        },
+        body: JSON.stringify({ adminUserCode: session.userCode, targetUserCode }),
+      });
 
-    const { error } = await supabase
-      .from('users')
-      .update({
-        password_hash: newPassword,
-        is_default_password: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_code', targetUserCode);
+      const data = await response.json();
 
-    if (error) {
+      if (!data.success) {
+        return { success: false, error: data.error };
+      }
+
+      return { success: true };
+    } catch (error) {
       console.error('Password reset error:', error);
       return { success: false, error: '비밀번호 초기화 중 오류가 발생했습니다.' };
     }
-
-    return { success: true };
   }, [session]);
 
   // 로그아웃
@@ -242,21 +232,6 @@ export function useAuth() {
     setSession(null);
     setRequirePasswordChange(false);
   }, []);
-
-  // 로그인 이력 저장 (Supabase)
-  const saveLoginHistory = async (session: UserSession) => {
-    try {
-      await supabase.from('login_history').insert({
-        user_code: session.userCode,
-        user_type: session.userType,
-        ip_address: 'web',
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-        login_at: session.loginAt,
-      });
-    } catch (error) {
-      console.error('Login history save error:', error);
-    }
-  };
 
   // 사용자 목록 조회 (관리자 전용)
   const getUsers = useCallback(async () => {

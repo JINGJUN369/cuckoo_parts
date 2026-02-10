@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '@/lib/auth-check';
 
 // Supabase 클라이언트 생성 (서버용)
 const supabase = createClient(
@@ -25,9 +26,13 @@ async function getEmailSettings() {
 // 자동발송 안내 문구
 const noReplyFooter = '\n\n---\n※ 본 메일은 자동발송되는 메일입니다. 회신하실 수 없습니다.\n   문의사항은 담당자에게 직접 연락해 주세요.';
 
-// 법인별 이메일 발송 API
+// 법인별 이메일 발송 API (관리자 전용)
 export async function POST(request: NextRequest) {
   try {
+    // 인증 확인 (admin_cs만 허용)
+    const auth = await verifyAuth(request, ['admin_cs']);
+    if ('error' in auth) return auth.error;
+
     const body = await request.json();
     const { dateFrom, dateTo, branchData } = body;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '@/lib/auth-check';
 
 // Supabase 클라이언트 생성 (서버용)
 const supabase = createClient(
@@ -22,9 +23,13 @@ async function getEmailSettings() {
   return settings;
 }
 
-// 이메일 발송 API
+// 이메일 발송 API (관리자 전용)
 export async function POST(request: NextRequest) {
   try {
+    // 인증 확인 (admin_cs만 허용)
+    const auth = await verifyAuth(request, ['admin_cs']);
+    if ('error' in auth) return auth.error;
+
     const body = await request.json();
     const { recipients, subject, message } = body;
 

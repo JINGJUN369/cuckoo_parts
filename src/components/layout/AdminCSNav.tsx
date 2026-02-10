@@ -13,6 +13,7 @@ import {
   Package,
   Users,
   Mail,
+  BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/admin-cs/upload', label: '데이터 업로드', icon: Upload },
   { href: '/admin-cs/materials', label: '회수대상 자재설정', icon: Settings },
   { href: '/admin-cs/product-settings', label: '회수대상 제품설정', icon: Package },
+  { href: '/admin-cs/recovery-report', label: '회수현황 보고서', icon: BarChart3 },
   { href: '/admin-cs/calendar', label: '달력', icon: Calendar },
   { href: '/admin-cs/history', label: '이력 조회', icon: History },
   { href: '/admin-cs/users', label: '사용자 관리', icon: Users },

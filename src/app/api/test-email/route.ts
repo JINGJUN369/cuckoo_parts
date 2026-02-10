@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAuth } from '@/lib/auth-check';
 
 // Supabase 클라이언트 생성 (서버용)
 const supabase = createClient(
@@ -7,9 +8,12 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-// 이메일 설정 테스트 API
+// 이메일 설정 테스트 API (관리자 전용)
 export async function GET(request: NextRequest) {
   try {
+    // 인증 확인 (admin_cs만 허용)
+    const auth = await verifyAuth(request, ['admin_cs']);
+    if ('error' in auth) return auth.error;
     // DB에서 설정 가져오기
     const { data: settings, error: settingsError } = await supabase
       .from('system_settings')
@@ -66,9 +70,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 테스트 이메일 발송
+// 테스트 이메일 발송 (관리자 전용)
 export async function POST(request: NextRequest) {
   try {
+    // 인증 확인 (admin_cs만 허용)
+    const auth = await verifyAuth(request, ['admin_cs']);
+    if ('error' in auth) return auth.error;
+
     const body = await request.json();
     const { testEmail } = body;
 
