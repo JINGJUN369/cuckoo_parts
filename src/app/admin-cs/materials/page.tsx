@@ -330,14 +330,14 @@ export default function MaterialsPage() {
                           {editingSerial === m.material_code ? (
                             <div className="flex items-center gap-1">
                               <Input
-                                placeholder="시작"
+                                placeholder="24A0000000"
                                 value={editSerialStart}
                                 onChange={(e) => setEditSerialStart(e.target.value)}
                                 className="h-7 w-24 text-xs"
                               />
                               <span className="text-xs text-muted-foreground">~</span>
                               <Input
-                                placeholder="끝"
+                                placeholder="24A9999999"
                                 value={editSerialEnd}
                                 onChange={(e) => setEditSerialEnd(e.target.value)}
                                 className="h-7 w-24 text-xs"
@@ -486,14 +486,14 @@ export default function MaterialsPage() {
                 <p className="text-xs text-muted-foreground mb-2">미입력 시 해당 자재코드의 모든 제조번호가 회수대상</p>
                 <div className="flex items-center gap-2">
                   <Input
-                    placeholder="시작 제조번호"
+                    placeholder="예: 24A0000000"
                     value={serialStart}
                     onChange={(e) => setSerialStart(e.target.value)}
                     className="flex-1"
                   />
                   <span className="text-muted-foreground">~</span>
                   <Input
-                    placeholder="끝 제조번호"
+                    placeholder="예: 24A9999999"
                     value={serialEnd}
                     onChange={(e) => setSerialEnd(e.target.value)}
                     className="flex-1"
@@ -545,14 +545,14 @@ export default function MaterialsPage() {
               <p className="text-xs text-muted-foreground">미입력 시 해당 자재코드의 모든 제조번호가 회수대상</p>
               <div className="flex items-center gap-2">
                 <Input
-                  placeholder="시작 제조번호"
+                  placeholder="예: 24A0000000"
                   value={serialStart}
                   onChange={(e) => setSerialStart(e.target.value)}
                   className="flex-1"
                 />
                 <span className="text-muted-foreground">~</span>
                 <Input
-                  placeholder="끝 제조번호"
+                  placeholder="예: 24A9999999"
                   value={serialEnd}
                   onChange={(e) => setSerialEnd(e.target.value)}
                   className="flex-1"
