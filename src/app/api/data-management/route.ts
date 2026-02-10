@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 // 데이터 삭제 (자동 백업 후 삭제) - 관리자 전용
-export async function DELETE(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     // 인증 확인 (admin_cs만 허용)
     const auth = await verifyAuth(request, ['admin_cs']);

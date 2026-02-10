@@ -268,7 +268,7 @@ export default function AdminSettingsPage() {
     setIsDeleting(true);
     try {
       const response = await fetch('/api/data-management', {
-        method: 'DELETE',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-user-code': encodeURIComponent(session?.userCode || ''),
