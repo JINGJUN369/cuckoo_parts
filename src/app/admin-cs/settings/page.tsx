@@ -271,12 +271,12 @@ export default function AdminSettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-code': encodeURIComponent(session?.userCode || ''),
         },
         body: JSON.stringify({
           tableName: dataType,
           dateFrom: deleteFromDate,
           dateTo: deleteToDate,
+          userCode: session?.userCode,
         }),
       });
 

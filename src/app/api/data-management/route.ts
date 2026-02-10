@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { verifyAuth } from '@/lib/auth-check';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -10,11 +9,28 @@ const supabase = createClient(
 // 데이터 삭제 (자동 백업 후 삭제) - 관리자 전용
 export async function POST(request: NextRequest) {
   try {
-    // 인증 확인 (admin_cs만 허용)
-    const auth = await verifyAuth(request, ['admin_cs']);
-    if ('error' in auth) return auth.error;
+    const { tableName, dateFrom, dateTo, userCode } = await request.json();
 
-    const { tableName, dateFrom, dateTo } = await request.json();
+    // 인증 확인: body에서 userCode를 받아 DB에서 admin_cs 확인
+    if (!userCode) {
+      return NextResponse.json(
+        { success: false, error: '인증 정보가 없습니다.' },
+        { status: 401 }
+      );
+    }
+
+    const { data: authUser } = await supabase
+      .from('users')
+      .select('user_code, user_type')
+      .eq('user_code', userCode)
+      .single();
+
+    if (!authUser || authUser.user_type !== 'admin_cs') {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다.' },
+        { status: 403 }
+      );
+    }
 
     if (!tableName || !dateFrom || !dateTo) {
       return NextResponse.json(
@@ -63,7 +79,7 @@ export async function POST(request: NextRequest) {
         deleted_count: targetData.length,
         date_from: dateFrom,
         date_to: dateTo,
-        deleted_by: auth.user.user_code,
+        deleted_by: authUser.user_code,
       });
 
     if (backupError) {
