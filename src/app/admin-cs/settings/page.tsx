@@ -125,7 +125,7 @@ export default function AdminSettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-code': session?.userCode || '',
+          'x-user-code': encodeURIComponent(session?.userCode || ''),
         },
         body: JSON.stringify({
           recipients: [testEmail],
@@ -271,7 +271,7 @@ export default function AdminSettingsPage() {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-code': session?.userCode || '',
+          'x-user-code': encodeURIComponent(session?.userCode || ''),
         },
         body: JSON.stringify({
           tableName: dataType,

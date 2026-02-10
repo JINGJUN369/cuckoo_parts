@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
 
 // 에러 로그 조회 (관리자 전용)
 export async function GET(request: NextRequest) {
-  const userCode = request.headers.get('x-user-code');
+  const rawUserCode = request.headers.get('x-user-code');
+  const userCode = rawUserCode ? decodeURIComponent(rawUserCode) : null;
   if (!userCode) {
     return NextResponse.json({ success: false, error: '인증 필요' }, { status: 401 });
   }
