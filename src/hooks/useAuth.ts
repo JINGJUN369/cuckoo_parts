@@ -173,7 +173,7 @@ export function useAuth() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-code': session.userCode,
+          'x-user-code': encodeURIComponent(session.userCode),
         },
         body: JSON.stringify({ userCode: session.userCode, newPassword }),
       });
@@ -208,7 +208,7 @@ export function useAuth() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-code': session.userCode,
+          'x-user-code': encodeURIComponent(session.userCode),
         },
         body: JSON.stringify({ action: 'reset', adminUserCode: session.userCode, targetUserCode }),
       });

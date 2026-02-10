@@ -18,7 +18,8 @@ export async function verifyAuth(
   request: NextRequest,
   allowedTypes?: string[]
 ): Promise<{ user: { user_code: string; user_type: string; branch_code?: string } } | { error: NextResponse }> {
-  const userCode = request.headers.get('x-user-code');
+  const rawUserCode = request.headers.get('x-user-code');
+  const userCode = rawUserCode ? decodeURIComponent(rawUserCode) : null;
 
   if (!userCode) {
     return {
