@@ -7,11 +7,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-const AUTH_MAP: Record<string, boolean> = {
-  '고객만족팀CS': true,
-  'CUCKOO품질팀': true,
-};
-
 const ADMIN_DEFAULT_PASSWORD = '12345678';
 const SALT_ROUNDS = 10;
 
@@ -72,8 +67,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    // 관리자 계정은 기본 비밀번호로, 설치법인은 ID로 초기화
-    const isAdminAccount = AUTH_MAP[targetUserCode] === true;
+    // 대상 사용자의 user_type 조회
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select('user_type')
+      .eq('user_code', targetUserCode)
+      .single();
+
+    // 관리자 계정(admin_cs, admin_quality)은 12345678로, 설치법인(branch)은 ID로 초기화
+    const isAdminAccount = targetUser?.user_type === 'admin_cs' || targetUser?.user_type === 'admin_quality';
     const newPassword = isAdminAccount ? ADMIN_DEFAULT_PASSWORD : targetUserCode;
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
