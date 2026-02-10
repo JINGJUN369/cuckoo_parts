@@ -26,6 +26,7 @@ import { StatusBadge } from '@/components/common/StatusBadge';
 import { ShippingModal } from '@/components/modals/ShippingModal';
 import { ConfirmModal } from '@/components/modals/ConfirmModal';
 import { CancelShippingModal } from '@/components/modals/CancelShippingModal';
+import { RecoveryMaterialsNotice } from '@/components/modals/RecoveryMaterialsNotice';
 import { OnboardingTour, RestartTourButton, TourStep } from '@/components/OnboardingTour';
 import { useMaterialUsage } from '@/hooks/useMaterialUsage';
 import { useProductRecovery } from '@/hooks/useProductRecovery';
@@ -226,7 +227,7 @@ function getDateRange(preset: DatePreset): { from: string; to: string } {
 
 export default function BranchDashboardPage() {
   // 메인 탭 상태 (통합/자재/제품)
-  const [mainTab, setMainTab] = useState<'overview' | 'material' | 'product'>('material');
+  const [mainTab, setMainTab] = useState<'overview' | 'material' | 'product'>('overview');
 
   const [selectedItem, setSelectedItem] = useState<MaterialUsage | null>(null);
   const [selectedProductItem, setSelectedProductItem] = useState<ProductRecovery | null>(null);
@@ -243,6 +244,7 @@ export default function BranchDashboardPage() {
   const [showBulkCancelModal, setShowBulkCancelModal] = useState(false);
   const [showBulkProductCancelModal, setShowBulkProductCancelModal] = useState(false);
   const [showOverdueWarning, setShowOverdueWarning] = useState(false);
+  const [showMaterialsNotice, setShowMaterialsNotice] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
 
   // 인쇄 모드 상태
@@ -279,6 +281,13 @@ export default function BranchDashboardPage() {
   useEffect(() => {
     loadCarriers();
   }, [loadCarriers]);
+
+  // 로그인 시 회수대상 자재 안내 팝업
+  useEffect(() => {
+    if (session) {
+      setShowMaterialsNotice(true);
+    }
+  }, [session]);
 
   // 기본 날짜 설정 (최근 30일)
   useEffect(() => {
@@ -2787,6 +2796,12 @@ export default function BranchDashboardPage() {
           }
         }
       `}</style>
+
+      {/* 회수대상 자재 안내 팝업 */}
+      <RecoveryMaterialsNotice
+        open={showMaterialsNotice}
+        onClose={() => setShowMaterialsNotice(false)}
+      />
     </div>
   );
 }
