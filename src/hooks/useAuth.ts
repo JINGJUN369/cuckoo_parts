@@ -205,12 +205,12 @@ export function useAuth() {
 
     try {
       const response = await fetch('/api/auth/change-password', {
-        method: 'PUT',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-user-code': session.userCode,
         },
-        body: JSON.stringify({ adminUserCode: session.userCode, targetUserCode }),
+        body: JSON.stringify({ action: 'reset', adminUserCode: session.userCode, targetUserCode }),
       });
 
       const data = await response.json();
