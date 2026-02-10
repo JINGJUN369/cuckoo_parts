@@ -71,6 +71,7 @@ export function useRecoveryMaterials() {
               .from('recovery_materials')
               .update({
                 is_active: true,
+                material_name: materialName,
                 deactivated_at: null,
                 deactivated_by: null,
                 serial_number_start: serialStart || null,
