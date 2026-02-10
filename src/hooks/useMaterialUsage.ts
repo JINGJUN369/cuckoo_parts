@@ -174,8 +174,8 @@ export function useMaterialUsage() {
         const batch = newItems.slice(i, i + BATCH_SIZE);
         const { error } = await supabase.from('material_usage').insert(batch);
         if (error) {
-          console.error('Insert error:', error);
-          throw error;
+          console.error('Insert error detail:', error.message, error.details, error.hint, error.code);
+          throw new Error(`업로드 오류: ${error.message}${error.details ? ` | ${error.details}` : ''}${error.hint ? ` | ${error.hint}` : ''}`);
         }
       }
 

@@ -279,7 +279,8 @@ export default function UploadPage() {
       toast.success(`업로드 완료: 저장 ${result.saved.toLocaleString()}건, 폐기 ${result.discarded.toLocaleString()}건`);
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error('업로드 중 오류가 발생했습니다.');
+      const errMsg = error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
+      toast.error(errMsg);
     } finally {
       setIsMaterialUploading(false);
       setMaterialUploadStatus('');
