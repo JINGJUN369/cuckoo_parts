@@ -9,9 +9,12 @@ const supabase = createClient(
 // 데이터 삭제 (자동 백업 후 삭제) - 관리자 전용
 export async function POST(request: NextRequest) {
   try {
-    const { tableName, dateFrom, dateTo, userCode } = await request.json();
+    const body = await request.json();
+    const { tableName, dateFrom, dateTo } = body;
 
-    // 인증 확인: body에서 userCode를 받아 DB에서 admin_cs 확인
+    // 인증 확인: body 또는 헤더에서 userCode를 받아 DB에서 admin_cs 확인
+    const rawHeader = request.headers.get('x-user-code');
+    const userCode = body.userCode || (rawHeader ? decodeURIComponent(rawHeader) : null);
     if (!userCode) {
       return NextResponse.json(
         { success: false, error: '인증 정보가 없습니다.' },
