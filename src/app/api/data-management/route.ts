@@ -101,7 +101,37 @@ export async function POST(request: NextRequest) {
       console.error('Backup exception (non-fatal):', backupErr);
     }
 
-    // 3. 데이터 삭제
+    // 3. 관련 이력 테이블 먼저 삭제 (외래 키 제약조건)
+    step = 'delete-history';
+    const targetIds = targetData.map((d: { id: string }) => d.id);
+
+    if (tableName === 'material_usage') {
+      const { error: historyError } = await supabase
+        .from('status_change_history')
+        .delete()
+        .in('material_usage_id', targetIds);
+
+      if (historyError) {
+        return NextResponse.json(
+          { success: false, error: `이력 삭제 오류: ${historyError.message}`, step },
+          { status: 500 }
+        );
+      }
+    } else if (tableName === 'product_recovery') {
+      const { error: historyError } = await supabase
+        .from('product_recovery_status_history')
+        .delete()
+        .in('product_recovery_id', targetIds);
+
+      if (historyError) {
+        return NextResponse.json(
+          { success: false, error: `이력 삭제 오류: ${historyError.message}`, step },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 4. 메인 데이터 삭제
     step = 'delete';
     const { error: deleteError } = await supabase
       .from(tableName)
