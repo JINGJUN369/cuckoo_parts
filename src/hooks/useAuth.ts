@@ -274,6 +274,28 @@ export function useAuth() {
     return { success: true };
   }, [session]);
 
+  // 사용자 법인명 수정 (관리자 전용)
+  const updateBranchName = useCallback(async (targetUserCode: string, branchName: string): Promise<{ success: boolean; error?: string }> => {
+    if (!session || session.userType !== 'admin_cs') {
+      return { success: false, error: '권한이 없습니다.' };
+    }
+
+    const { error } = await supabase
+      .from('users')
+      .update({
+        branch_name: branchName || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_code', targetUserCode);
+
+    if (error) {
+      console.error('Branch name update error:', error);
+      return { success: false, error: '법인명 수정 중 오류가 발생했습니다.' };
+    }
+
+    return { success: true };
+  }, [session]);
+
   return {
     session,
     isLoading,
@@ -283,6 +305,7 @@ export function useAuth() {
     resetPassword,
     getUsers,
     updateUserEmail,
+    updateBranchName,
     requirePasswordChange,
     setRequirePasswordChange,
     isAuthenticated: !!session,

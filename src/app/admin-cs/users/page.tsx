@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, RefreshCw, UserCog, Key, Mail, Pencil } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, RefreshCw, UserCog, Key, Mail, Pencil, Building2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
+import { useProductRecovery } from '@/hooks/useProductRecovery';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
 
@@ -34,6 +35,7 @@ interface User {
   is_default_password: boolean;
   is_active: boolean;
   branch_code: string | null;
+  branch_name: string | null;
   email: string | null;
   created_at: string;
   last_login_at: string | null;
@@ -48,7 +50,22 @@ export default function UsersPage() {
   const [emailEditTarget, setEmailEditTarget] = useState<User | null>(null);
   const [editEmail, setEditEmail] = useState('');
   const [isSavingEmail, setIsSavingEmail] = useState(false);
-  const { getUsers, resetPassword, updateUserEmail } = useAuth();
+  const [branchNameEditTarget, setBranchNameEditTarget] = useState<User | null>(null);
+  const [editBranchName, setEditBranchName] = useState('');
+  const [isSavingBranchName, setIsSavingBranchName] = useState(false);
+  const { getUsers, resetPassword, updateUserEmail, updateBranchName } = useAuth();
+  const { data: productData } = useProductRecovery();
+
+  // 제품 데이터에서 branch_code → request_branch 자동 매핑
+  const autoNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    productData.forEach(item => {
+      if (item.branch_code && item.request_branch && !map[item.branch_code]) {
+        map[item.branch_code] = item.request_branch;
+      }
+    });
+    return map;
+  }, [productData]);
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -76,6 +93,7 @@ export default function UsersPage() {
         user.user_code.toLowerCase().includes(term) ||
         user.user_type.toLowerCase().includes(term) ||
         (user.branch_code && user.branch_code.toLowerCase().includes(term)) ||
+        (user.branch_name && user.branch_name.toLowerCase().includes(term)) ||
         (user.email && user.email.toLowerCase().includes(term))
       ));
     }
@@ -115,6 +133,31 @@ export default function UsersPage() {
       }
     } finally {
       setIsSavingEmail(false);
+    }
+  };
+
+  const handleEditBranchName = (user: User) => {
+    setBranchNameEditTarget(user);
+    // 우선순위: 수동 설정값 > 자동 추출값
+    setEditBranchName(user.branch_name || (user.branch_code ? autoNameMap[user.branch_code] || '' : ''));
+  };
+
+  const handleSaveBranchName = async () => {
+    if (!branchNameEditTarget) return;
+
+    setIsSavingBranchName(true);
+    try {
+      const result = await updateBranchName(branchNameEditTarget.user_code, editBranchName);
+      if (result.success) {
+        toast.success(`${branchNameEditTarget.user_code}의 법인명이 저장되었습니다.`);
+        setBranchNameEditTarget(null);
+        setEditBranchName('');
+        loadUsers();
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      setIsSavingBranchName(false);
     }
   };
 
@@ -169,6 +212,7 @@ export default function UsersPage() {
                   <TableHead>사용자 ID</TableHead>
                   <TableHead>유형</TableHead>
                   <TableHead>법인코드</TableHead>
+                  <TableHead>법인명</TableHead>
                   <TableHead>이메일</TableHead>
                   <TableHead>비밀번호 상태</TableHead>
                   <TableHead>계정 상태</TableHead>
@@ -179,7 +223,7 @@ export default function UsersPage() {
               <TableBody>
                 {filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       {isLoading ? '로딩 중...' : '등록된 사용자가 없습니다.'}
                     </TableCell>
                   </TableRow>
@@ -189,6 +233,32 @@ export default function UsersPage() {
                       <TableCell className="font-medium">{user.user_code}</TableCell>
                       <TableCell>{getUserTypeBadge(user.user_type)}</TableCell>
                       <TableCell>{user.branch_code || '-'}</TableCell>
+                      <TableCell>
+                        {user.user_type === 'branch' ? (
+                          <div className="flex items-center gap-2">
+                            {user.branch_name ? (
+                              <span className="text-sm">{user.branch_name}</span>
+                            ) : autoNameMap[user.branch_code || ''] ? (
+                              <span className="text-sm text-blue-600" title="제품 데이터에서 자동 추출">
+                                {autoNameMap[user.branch_code || '']}
+                                <span className="text-xs text-muted-foreground ml-1">(자동)</span>
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">미설정</span>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => handleEditBranchName(user)}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {user.email ? (
@@ -304,6 +374,59 @@ export default function UsersPage() {
             </Button>
             <Button onClick={handleSaveEmail} disabled={isSavingEmail}>
               {isSavingEmail ? '저장 중...' : '저장'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 법인명 수정 모달 */}
+      <Dialog open={!!branchNameEditTarget} onOpenChange={() => setBranchNameEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              법인명 설정
+            </DialogTitle>
+            <DialogDescription>
+              <strong>{branchNameEditTarget?.user_code}</strong> ({branchNameEditTarget?.branch_code})의 법인명을 설정합니다.
+              <br />
+              대시보드에서 법인코드 대신 이 이름이 표시됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <div>
+              <Label htmlFor="branchName">법인명 (요청지점)</Label>
+              <Input
+                id="branchName"
+                placeholder="예: 서울강남, 경기수원"
+                value={editBranchName}
+                onChange={(e) => setEditBranchName(e.target.value)}
+                className="mt-2"
+              />
+            </div>
+            {branchNameEditTarget?.branch_code && autoNameMap[branchNameEditTarget.branch_code] && (
+              <div className="text-sm text-muted-foreground bg-blue-50 rounded-md px-3 py-2">
+                <span className="font-medium text-blue-700">자동 추출값:</span>{' '}
+                {autoNameMap[branchNameEditTarget.branch_code]}
+                {editBranchName !== autoNameMap[branchNameEditTarget.branch_code] && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 ml-2 text-blue-600"
+                    onClick={() => setEditBranchName(autoNameMap[branchNameEditTarget.branch_code!]!)}
+                  >
+                    적용
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBranchNameEditTarget(null)}>
+              취소
+            </Button>
+            <Button onClick={handleSaveBranchName} disabled={isSavingBranchName}>
+              {isSavingBranchName ? '저장 중...' : '저장'}
             </Button>
           </DialogFooter>
         </DialogContent>

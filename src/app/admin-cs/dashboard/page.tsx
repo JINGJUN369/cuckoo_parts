@@ -134,7 +134,7 @@ export default function AdminCSDashboardPage() {
   // 리포트 팝업 상태
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportText, setReportText] = useState('');
-  const [availableUsers, setAvailableUsers] = useState<{ user_code: string; email: string; branch_code?: string }[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<{ user_code: string; email: string; branch_code?: string; branch_name?: string }[]>([]);
 
   // 초기 날짜 설정 (최근 30일)
   useEffect(() => {
@@ -146,13 +146,12 @@ export default function AdminCSDashboardPage() {
     setIsMainSearched(true);
   }, []);
 
-  // 이메일이 등록된 사용자 목록 로드
+  // 사용자 목록 로드 (이메일, 법인명 포함)
   const loadUsersWithEmail = useCallback(async () => {
     const { data: users } = await supabase
       .from('users')
-      .select('user_code, email, branch_code')
-      .not('email', 'is', null)
-      .neq('email', '');
+      .select('user_code, email, branch_code, branch_name')
+      .eq('user_type', 'branch');
 
     if (users) {
       setAvailableUsers(users);
@@ -169,16 +168,23 @@ export default function AdminCSDashboardPage() {
   const materialRecoveryTargets = useMemo(() => getMaterialRecoveryTargets(), [getMaterialRecoveryTargets]);
   const productRecoveryTargets = useMemo(() => getProductRecoveryTargets(), [getProductRecoveryTargets]);
 
-  // branch_code → request_branch(요청지점) 매핑
+  // branch_code → 법인명 매핑 (우선순위: users 테이블 수동 설정 > 제품 데이터 자동 추출)
   const branchNameMap = useMemo(() => {
     const map: Record<string, string> = {};
+    // 1단계: 제품 데이터에서 자동 추출 (기본값)
     productData.forEach(item => {
       if (item.branch_code && item.request_branch && !map[item.branch_code]) {
         map[item.branch_code] = item.request_branch;
       }
     });
+    // 2단계: users 테이블 수동 설정값 덮어쓰기 (우선순위 높음)
+    availableUsers.forEach(user => {
+      if (user.branch_code && user.branch_name) {
+        map[user.branch_code] = user.branch_name;
+      }
+    });
     return map;
-  }, [productData]);
+  }, [productData, availableUsers]);
 
   // 법인코드를 법인명으로 표시하는 헬퍼
   const getBranchDisplayName = useCallback((code: string) => {
