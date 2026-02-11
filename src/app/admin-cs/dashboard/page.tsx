@@ -961,28 +961,263 @@ export default function AdminCSDashboardPage() {
                 </Card>
               </TabsContent>
 
-              {/* 회수완료/발송/발송불가 탭은 유사한 구조로 생략 */}
+              {/* 회수완료 탭 */}
               <TabsContent value="collected">
                 <Card>
-                  <CardHeader><CardTitle>회수완료 목록</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>회수완료 목록 (발송대기)</CardTitle></CardHeader>
                   <CardContent>
-                    <p className="text-center py-8 text-muted-foreground">{collectedData.length}건의 회수완료 항목이 있습니다.</p>
+                    {collectedData.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {isProduct ? (
+                              <>
+                                <TableHead>고객번호</TableHead>
+                                <TableHead>고객명</TableHead>
+                                <TableHead>모델명</TableHead>
+                                <TableHead>유형</TableHead>
+                                <TableHead>회수완료일</TableHead>
+                                <TableHead>상태변경</TableHead>
+                              </>
+                            ) : (
+                              <>
+                                <TableHead>요청번호</TableHead>
+                                <TableHead>처리시간</TableHead>
+                                <TableHead>모델명</TableHead>
+                                <TableHead>자재코드</TableHead>
+                                <TableHead>회수완료일</TableHead>
+                                <TableHead>상태변경</TableHead>
+                              </>
+                            )}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {collectedData.slice(0, 50).map((item) => (
+                            <TableRow key={item.id}>
+                              {isProduct ? (
+                                <>
+                                  <TableCell className="font-medium">{(item as ProductRecovery).customer_number}</TableCell>
+                                  <TableCell>{(item as ProductRecovery).customer_name}</TableCell>
+                                  <TableCell>{(item as ProductRecovery).model_name}</TableCell>
+                                  <TableCell><Badge variant="outline">{(item as ProductRecovery).recovery_type}</Badge></TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {(item as ProductRecovery).collected_at ? new Date((item as ProductRecovery).collected_at!).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select onValueChange={(value) => handleProductForceStatusChange(item as ProductRecovery, value as ProductRecoveryStatus)}>
+                                      <SelectTrigger className="w-28 h-8"><SelectValue placeholder="변경" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="발송">발송</SelectItem>
+                                        <SelectItem value="발송불가">발송불가</SelectItem>
+                                        <SelectItem value="회수대기">회수대기</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                </>
+                              ) : (
+                                <>
+                                  <TableCell className="font-medium">{(item as MaterialUsage).request_number}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {(item as MaterialUsage).process_time ? new Date((item as MaterialUsage).process_time!).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                  </TableCell>
+                                  <TableCell>{(item as MaterialUsage).model_name}</TableCell>
+                                  <TableCell>{(item as MaterialUsage).material_code}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {(item as MaterialUsage).collected_at ? new Date((item as MaterialUsage).collected_at!).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select onValueChange={(value) => handleMaterialForceStatusChange(item as MaterialUsage, value as RecoveryStatus)}>
+                                      <SelectTrigger className="w-28 h-8"><SelectValue placeholder="변경" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="발송">발송</SelectItem>
+                                        <SelectItem value="발송불가">발송불가</SelectItem>
+                                        <SelectItem value="회수대기">회수대기</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                </>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">해당 기간에 회수완료 건이 없습니다.</p>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              {/* 발송 탭 */}
               <TabsContent value="shipped">
                 <Card>
                   <CardHeader><CardTitle>발송 목록</CardTitle></CardHeader>
                   <CardContent>
-                    <p className="text-center py-8 text-muted-foreground">{shippedData.length}건의 발송 항목이 있습니다.</p>
+                    {shippedData.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {isProduct ? (
+                              <>
+                                <TableHead>고객번호</TableHead>
+                                <TableHead>고객명</TableHead>
+                                <TableHead>모델명</TableHead>
+                                <TableHead>운송사</TableHead>
+                                <TableHead>송장번호</TableHead>
+                                <TableHead>발송일</TableHead>
+                                <TableHead>상태변경</TableHead>
+                              </>
+                            ) : (
+                              <>
+                                <TableHead>요청번호</TableHead>
+                                <TableHead>모델명</TableHead>
+                                <TableHead>자재코드</TableHead>
+                                <TableHead>운송사</TableHead>
+                                <TableHead>송장번호</TableHead>
+                                <TableHead>발송일</TableHead>
+                                <TableHead>상태변경</TableHead>
+                              </>
+                            )}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {shippedData.slice(0, 50).map((item) => (
+                            <TableRow key={item.id}>
+                              {isProduct ? (
+                                <>
+                                  <TableCell className="font-medium">{(item as ProductRecovery).customer_number}</TableCell>
+                                  <TableCell>{(item as ProductRecovery).customer_name}</TableCell>
+                                  <TableCell>{(item as ProductRecovery).model_name}</TableCell>
+                                  <TableCell>{(item as ProductRecovery).carrier || '-'}</TableCell>
+                                  <TableCell className="font-mono text-sm">{(item as ProductRecovery).tracking_number || '-'}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {(item as ProductRecovery).shipped_at ? new Date((item as ProductRecovery).shipped_at!).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select onValueChange={(value) => handleProductForceStatusChange(item as ProductRecovery, value as ProductRecoveryStatus)}>
+                                      <SelectTrigger className="w-28 h-8"><SelectValue placeholder="변경" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="입고완료">입고완료</SelectItem>
+                                        <SelectItem value="회수완료">회수완료</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                </>
+                              ) : (
+                                <>
+                                  <TableCell className="font-medium">{(item as MaterialUsage).request_number}</TableCell>
+                                  <TableCell>{(item as MaterialUsage).model_name}</TableCell>
+                                  <TableCell>{(item as MaterialUsage).material_code}</TableCell>
+                                  <TableCell>{(item as MaterialUsage).carrier || '-'}</TableCell>
+                                  <TableCell className="font-mono text-sm">{(item as MaterialUsage).tracking_number || '-'}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {(item as MaterialUsage).shipped_at ? new Date((item as MaterialUsage).shipped_at!).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select onValueChange={(value) => handleMaterialForceStatusChange(item as MaterialUsage, value as RecoveryStatus)}>
+                                      <SelectTrigger className="w-28 h-8"><SelectValue placeholder="변경" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="입고완료">입고완료</SelectItem>
+                                        <SelectItem value="회수완료">회수완료</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                </>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">해당 기간에 발송 건이 없습니다.</p>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              {/* 발송불가 탭 */}
               <TabsContent value="cancelled">
                 <Card>
                   <CardHeader><CardTitle>발송불가 목록</CardTitle></CardHeader>
                   <CardContent>
-                    <p className="text-center py-8 text-muted-foreground">{cancelledData.length}건의 발송불가 항목이 있습니다.</p>
+                    {cancelledData.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {isProduct ? (
+                              <>
+                                <TableHead>고객번호</TableHead>
+                                <TableHead>고객명</TableHead>
+                                <TableHead>모델명</TableHead>
+                                <TableHead>사유</TableHead>
+                                <TableHead>상세사유</TableHead>
+                                <TableHead>처리일</TableHead>
+                                <TableHead>상태변경</TableHead>
+                              </>
+                            ) : (
+                              <>
+                                <TableHead>요청번호</TableHead>
+                                <TableHead>모델명</TableHead>
+                                <TableHead>자재코드</TableHead>
+                                <TableHead>사유</TableHead>
+                                <TableHead>상세사유</TableHead>
+                                <TableHead>처리일</TableHead>
+                                <TableHead>상태변경</TableHead>
+                              </>
+                            )}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {cancelledData.slice(0, 50).map((item) => (
+                            <TableRow key={item.id}>
+                              {isProduct ? (
+                                <>
+                                  <TableCell className="font-medium">{(item as ProductRecovery).customer_number}</TableCell>
+                                  <TableCell>{(item as ProductRecovery).customer_name}</TableCell>
+                                  <TableCell>{(item as ProductRecovery).model_name}</TableCell>
+                                  <TableCell><Badge variant="outline">{(item as ProductRecovery).cancel_reason || '-'}</Badge></TableCell>
+                                  <TableCell className="text-sm">{(item as ProductRecovery).cancel_reason_detail || '-'}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {(item as ProductRecovery).cancelled_at ? new Date((item as ProductRecovery).cancelled_at!).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select onValueChange={(value) => handleProductForceStatusChange(item as ProductRecovery, value as ProductRecoveryStatus)}>
+                                      <SelectTrigger className="w-28 h-8"><SelectValue placeholder="변경" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="회수대기">회수대기</SelectItem>
+                                        <SelectItem value="회수완료">회수완료</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                </>
+                              ) : (
+                                <>
+                                  <TableCell className="font-medium">{(item as MaterialUsage).request_number}</TableCell>
+                                  <TableCell>{(item as MaterialUsage).model_name}</TableCell>
+                                  <TableCell>{(item as MaterialUsage).material_code}</TableCell>
+                                  <TableCell><Badge variant="outline">{(item as MaterialUsage).cancel_reason || '-'}</Badge></TableCell>
+                                  <TableCell className="text-sm">{(item as MaterialUsage).cancel_reason_detail || '-'}</TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {(item as MaterialUsage).cancelled_at ? new Date((item as MaterialUsage).cancelled_at!).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Select onValueChange={(value) => handleMaterialForceStatusChange(item as MaterialUsage, value as RecoveryStatus)}>
+                                      <SelectTrigger className="w-28 h-8"><SelectValue placeholder="변경" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="회수대기">회수대기</SelectItem>
+                                        <SelectItem value="회수완료">회수완료</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </TableCell>
+                                </>
+                              )}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center py-8 text-muted-foreground">해당 기간에 발송불가 건이 없습니다.</p>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
