@@ -84,7 +84,7 @@ export function RecoveryMaterialsNotice({ open, onClose }: RecoveryMaterialsNoti
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-blue-600" />
@@ -95,7 +95,7 @@ export function RecoveryMaterialsNotice({ open, onClose }: RecoveryMaterialsNoti
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-2">
+        <div className="py-2 overflow-x-auto">
           {activeMaterials.length > 0 ? (
             <Table>
               <TableHeader>

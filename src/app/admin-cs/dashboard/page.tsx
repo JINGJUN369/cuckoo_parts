@@ -169,6 +169,23 @@ export default function AdminCSDashboardPage() {
   const materialRecoveryTargets = useMemo(() => getMaterialRecoveryTargets(), [getMaterialRecoveryTargets]);
   const productRecoveryTargets = useMemo(() => getProductRecoveryTargets(), [getProductRecoveryTargets]);
 
+  // branch_code → request_branch(요청지점) 매핑
+  const branchNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    productData.forEach(item => {
+      if (item.branch_code && item.request_branch && !map[item.branch_code]) {
+        map[item.branch_code] = item.request_branch;
+      }
+    });
+    return map;
+  }, [productData]);
+
+  // 법인코드를 법인명으로 표시하는 헬퍼
+  const getBranchDisplayName = useCallback((code: string) => {
+    const name = branchNameMap[code];
+    return name ? `${name} (${code})` : code;
+  }, [branchNameMap]);
+
   // 통합 통계
   const combinedStats = useMemo(() => ({
     total: materialStats.total + productStats.total,
@@ -700,12 +717,12 @@ export default function AdminCSDashboardPage() {
     text += `${'─'.repeat(40)}\n`;
 
     combinedBranchStats.forEach((branch) => {
-      text += `${branch.branch} (자재:${branch.materialCount} / 제품:${branch.productCount})\n`;
+      text += `${getBranchDisplayName(branch.branch)} (자재:${branch.materialCount} / 제품:${branch.productCount})\n`;
       text += `  대기:${branch.waiting} / 완료:${branch.collected} / 발송:${branch.shipped} / 입고:${branch.received} / 불가:${branch.cancelled}\n`;
     });
 
     return text;
-  }, [isMainSearched, appliedMainDateFrom, appliedMainDateTo, filteredMaterialStats, filteredProductStats, filteredCombinedStats, combinedBranchStats]);
+  }, [isMainSearched, appliedMainDateFrom, appliedMainDateTo, filteredMaterialStats, filteredProductStats, filteredCombinedStats, combinedBranchStats, getBranchDisplayName]);
 
   // 개별 법인 리포트 생성
   const generateBranchReport = useCallback(() => {
@@ -717,7 +734,7 @@ export default function AdminCSDashboardPage() {
     const isProduct = branchViewType === 'product';
     const stats = isProduct ? searchProductStats : searchMaterialStats;
 
-    let text = `[${selectedBranch}] ${isProduct ? '제품' : '자재'} 회수 현황\n`;
+    let text = `[${getBranchDisplayName(selectedBranch)}] ${isProduct ? '제품' : '자재'} 회수 현황\n`;
     text += `조회 기간: ${dateRange}\n`;
     text += `생성 일시: ${now}\n`;
     text += `${'─'.repeat(30)}\n`;
@@ -728,7 +745,7 @@ export default function AdminCSDashboardPage() {
     text += `발송불가: ${stats.cancelled}건\n`;
 
     return text;
-  }, [selectedBranch, isSearched, appliedDateFrom, appliedDateTo, branchViewType, searchProductStats, searchMaterialStats]);
+  }, [selectedBranch, isSearched, appliedDateFrom, appliedDateTo, branchViewType, searchProductStats, searchMaterialStats, getBranchDisplayName]);
 
   // 클립보드 복사
   const handleCopyReport = async (text: string) => {
@@ -810,7 +827,7 @@ export default function AdminCSDashboardPage() {
           </Button>
           <div className="flex-1">
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              법인 상세 현황: {selectedBranch}
+              법인 상세 현황: {getBranchDisplayName(selectedBranch)}
               <Badge variant={isProduct ? 'secondary' : 'default'}>{isProduct ? '제품' : '자재'}</Badge>
             </h1>
             <p className="text-muted-foreground">관리자 모드 - 상태 강제 변경 가능</p>
@@ -1371,7 +1388,7 @@ export default function AdminCSDashboardPage() {
                     <BarChart data={combinedBranchStats.slice(0, 10)} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis type="number" />
-                      <YAxis dataKey="branch" type="category" width={60} />
+                      <YAxis dataKey="branch" type="category" width={100} tickFormatter={(code: string) => branchNameMap[code] || code} />
                       <Tooltip />
                       <Legend />
                       <Bar dataKey="waiting" name="회수대기" stackId="a" fill={STATUS_COLORS['회수대기']} />
@@ -1400,7 +1417,7 @@ export default function AdminCSDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>법인코드</TableHead>
+                      <TableHead>법인명</TableHead>
                       <TableHead className="text-center">자재</TableHead>
                       <TableHead className="text-center">제품</TableHead>
                       <TableHead className="text-center">회수대기</TableHead>
@@ -1414,7 +1431,7 @@ export default function AdminCSDashboardPage() {
                   <TableBody>
                     {combinedBranchStats.map((branch) => (
                       <TableRow key={branch.branch}>
-                        <TableCell className="font-medium">{branch.branch}</TableCell>
+                        <TableCell className="font-medium">{getBranchDisplayName(branch.branch)}</TableCell>
                         <TableCell className="text-center"><Badge variant="outline">{branch.materialCount}</Badge></TableCell>
                         <TableCell className="text-center"><Badge variant="secondary">{branch.productCount}</Badge></TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-red-50 text-red-700">{branch.waiting}</Badge></TableCell>
@@ -1477,7 +1494,7 @@ export default function AdminCSDashboardPage() {
                     <BarChart data={materialBranchStats.slice(0, 10)} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis type="number" />
-                      <YAxis dataKey="branch" type="category" width={60} />
+                      <YAxis dataKey="branch" type="category" width={100} tickFormatter={(code: string) => branchNameMap[code] || code} />
                       <Tooltip />
                       <Legend />
                       <Bar dataKey="waiting" name="회수대기" stackId="a" fill={STATUS_COLORS['회수대기']} />
@@ -1501,7 +1518,7 @@ export default function AdminCSDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>법인코드</TableHead>
+                      <TableHead>법인명</TableHead>
                       <TableHead className="text-center">회수대기</TableHead>
                       <TableHead className="text-center">회수완료</TableHead>
                       <TableHead className="text-center">발송</TableHead>
@@ -1514,7 +1531,7 @@ export default function AdminCSDashboardPage() {
                   <TableBody>
                     {materialBranchStats.map((branch) => (
                       <TableRow key={branch.branch} className="cursor-pointer hover:bg-gray-50" onClick={() => handleSelectBranch(branch.branch, 'material')}>
-                        <TableCell className="font-medium">{branch.branch}</TableCell>
+                        <TableCell className="font-medium">{getBranchDisplayName(branch.branch)}</TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-red-50 text-red-700">{branch.waiting}</Badge></TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-amber-50 text-amber-700">{branch.collected}</Badge></TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-blue-50 text-blue-700">{branch.shipped}</Badge></TableCell>
@@ -1582,7 +1599,7 @@ export default function AdminCSDashboardPage() {
                     <BarChart data={productBranchStats.slice(0, 10)} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis type="number" />
-                      <YAxis dataKey="branch" type="category" width={60} />
+                      <YAxis dataKey="branch" type="category" width={100} tickFormatter={(code: string) => branchNameMap[code] || code} />
                       <Tooltip />
                       <Legend />
                       <Bar dataKey="waiting" name="회수대기" stackId="a" fill={STATUS_COLORS['회수대기']} />
@@ -1606,7 +1623,7 @@ export default function AdminCSDashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>법인코드</TableHead>
+                      <TableHead>법인명</TableHead>
                       <TableHead className="text-center">회수대기</TableHead>
                       <TableHead className="text-center">회수완료</TableHead>
                       <TableHead className="text-center">발송</TableHead>
@@ -1619,7 +1636,7 @@ export default function AdminCSDashboardPage() {
                   <TableBody>
                     {productBranchStats.map((branch) => (
                       <TableRow key={branch.branch} className="cursor-pointer hover:bg-gray-50" onClick={() => handleSelectBranch(branch.branch, 'product')}>
-                        <TableCell className="font-medium">{branch.branch}</TableCell>
+                        <TableCell className="font-medium">{getBranchDisplayName(branch.branch)}</TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-red-50 text-red-700">{branch.waiting}</Badge></TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-amber-50 text-amber-700">{branch.collected}</Badge></TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-blue-50 text-blue-700">{branch.shipped}</Badge></TableCell>
