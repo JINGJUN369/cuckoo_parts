@@ -1,15 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Copy, CheckCircle2, Package } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { Copy, CheckCircle2, Package, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -33,6 +25,16 @@ export function RecoveryMaterialsNotice({ open, onClose }: RecoveryMaterialsNoti
   const [copied, setCopied] = useState(false);
 
   const activeMaterials = useMemo(() => getActiveMaterials(), [getActiveMaterials]);
+
+  // ESC 키로 닫기
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
 
   // 복사용 텍스트 생성
   const copyText = useMemo(() => {
@@ -82,77 +84,102 @@ export function RecoveryMaterialsNotice({ open, onClose }: RecoveryMaterialsNoti
     }
   }, [copyText]);
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-blue-600" />
-            회수대상 자재 안내
-          </DialogTitle>
-          <DialogDescription>
-            현재 회수대상으로 지정된 자재 목록입니다. 해당 자재가 포함된 AS건의 부품을 회수하여 본사로 발송해 주세요.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="py-2 overflow-x-auto">
-          {activeMaterials.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]">No</TableHead>
-                  <TableHead>자재코드</TableHead>
-                  <TableHead>자재명</TableHead>
-                  <TableHead>제조번호 범위</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activeMaterials.map((m, idx) => (
-                  <TableRow key={m.id}>
-                    <TableCell className="text-center text-muted-foreground">{idx + 1}</TableCell>
-                    <TableCell className="font-mono text-sm font-medium">{m.material_code}</TableCell>
-                    <TableCell className="text-sm">{m.material_name || '-'}</TableCell>
-                    <TableCell>
-                      {m.serial_number_start || m.serial_number_end ? (
-                        <span className="font-mono text-xs">
-                          {m.serial_number_start || '∞'} ~ {m.serial_number_end || '∞'}
-                        </span>
-                      ) : (
-                        <Badge variant="outline" className="text-xs">전체</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              현재 등록된 회수대상 자재가 없습니다.
-            </div>
-          )}
-        </div>
-
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button
-            variant="outline"
-            onClick={handleCopy}
-            className="flex items-center gap-2"
+    <>
+      {/* 배경 오버레이 */}
+      <div
+        className="fixed inset-0 z-[9998] bg-black/50"
+        onClick={onClose}
+      />
+      {/* 모달 콘텐츠 */}
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
+        <div
+          className="relative bg-background w-[95vw] sm:max-w-2xl max-h-[85vh] overflow-y-auto rounded-lg border shadow-lg p-6 pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* 닫기 버튼 */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 rounded-sm opacity-70 hover:opacity-100 transition-opacity"
           >
-            {copied ? (
-              <>
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                복사됨
-              </>
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </button>
+
+          {/* 헤더 */}
+          <div className="flex flex-col gap-2 text-center sm:text-left mb-4">
+            <h2 className="text-lg leading-none font-semibold flex items-center gap-2">
+              <Package className="h-5 w-5 text-blue-600" />
+              회수대상 자재 안내
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              현재 회수대상으로 지정된 자재 목록입니다. 해당 자재가 포함된 AS건의 부품을 회수하여 본사로 발송해 주세요.
+            </p>
+          </div>
+
+          {/* 테이블 */}
+          <div className="py-2 overflow-x-auto">
+            {activeMaterials.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">No</TableHead>
+                    <TableHead>자재코드</TableHead>
+                    <TableHead>자재명</TableHead>
+                    <TableHead>제조번호 범위</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeMaterials.map((m, idx) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="text-center text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell className="font-mono text-sm font-medium">{m.material_code}</TableCell>
+                      <TableCell className="text-sm">{m.material_name || '-'}</TableCell>
+                      <TableCell>
+                        {m.serial_number_start || m.serial_number_end ? (
+                          <span className="font-mono text-xs">
+                            {m.serial_number_start || '∞'} ~ {m.serial_number_end || '∞'}
+                          </span>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">전체</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
-              <>
-                <Copy className="h-4 w-4" />
-                텍스트 복사
-              </>
+              <div className="text-center py-8 text-muted-foreground">
+                현재 등록된 회수대상 자재가 없습니다.
+              </div>
             )}
-          </Button>
-          <Button onClick={onClose}>확인</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </div>
+
+          {/* 푸터 */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={handleCopy}
+              className="flex items-center gap-2"
+            >
+              {copied ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  복사됨
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  텍스트 복사
+                </>
+              )}
+            </Button>
+            <Button onClick={onClose}>확인</Button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
