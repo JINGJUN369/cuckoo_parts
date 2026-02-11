@@ -282,11 +282,31 @@ export default function BranchDashboardPage() {
     loadCarriers();
   }, [loadCarriers]);
 
-  // 로그인 시 회수대상 자재 안내 팝업
+  // 로그인 시 회수대상 자재 안내 팝업 (투어와 충돌 방지: 투어 완료/스킵 시에만 표시)
   useEffect(() => {
-    if (session) {
-      setShowMaterialsNotice(true);
+    if (!session) return;
+
+    const tourData = localStorage.getItem(TOUR_STORAGE_KEY);
+    if (tourData) {
+      try {
+        const parsed = JSON.parse(tourData);
+        const firstShownDate = new Date(parsed.firstShown);
+        const daysPassed = Math.floor((Date.now() - firstShownDate.getTime()) / (1000 * 60 * 60 * 24));
+        // 투어가 영구 스킵되었거나, 7일 지나서 투어가 안 뜨는 경우 → 즉시 팝업
+        if (parsed.permanentlySkipped || daysPassed >= 7) {
+          setShowMaterialsNotice(true);
+          return;
+        }
+      } catch {
+        // 파싱 실패 시 투어가 뜰 수 있으므로 대기
+      }
     }
+    // 투어가 아직 활성화될 수 있는 경우 → 투어 시작(1.5초) + 여유 후 팝업 표시
+    // 투어가 끝나면 팝업 표시 (2초 후 확인)
+    const timer = setTimeout(() => {
+      setShowMaterialsNotice(true);
+    }, 2000);
+    return () => clearTimeout(timer);
   }, [session]);
 
   // 기본 날짜 설정 (최근 30일)
@@ -2797,11 +2817,13 @@ export default function BranchDashboardPage() {
         }
       `}</style>
 
-      {/* 회수대상 자재 안내 팝업 */}
-      <RecoveryMaterialsNotice
-        open={showMaterialsNotice}
-        onClose={() => setShowMaterialsNotice(false)}
-      />
+      {/* 회수대상 자재 안내 팝업 (조건부 렌더 - 불필요한 Supabase 구독 방지) */}
+      {showMaterialsNotice && (
+        <RecoveryMaterialsNotice
+          open={showMaterialsNotice}
+          onClose={() => setShowMaterialsNotice(false)}
+        />
+      )}
     </div>
   );
 }
