@@ -20,6 +20,7 @@ export const STORAGE_KEYS = {
   UPLOAD_HISTORY: 'parts_upload_history',
   LOGIN_HISTORY: 'parts_login_history',
   STATUS_CHANGE_HISTORY: 'parts_status_change_history',
+  ANALYTICS_SESSION_ID: 'parts_analytics_session_id',
 };
 
 // 초기 운송회사 데이터

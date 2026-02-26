@@ -14,6 +14,7 @@ import {
   Users,
   Mail,
   BarChart3,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,6 +31,7 @@ const navItems = [
   { href: '/admin-cs/history', label: '이력 조회', icon: History },
   { href: '/admin-cs/users', label: '사용자 관리', icon: Users },
   { href: '/admin-cs/settings', label: '이메일 설정', icon: Mail },
+  { href: '/admin-cs/analytics', label: '사용 분석', icon: TrendingUp },
 ];
 
 export function AdminCSNav() {

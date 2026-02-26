@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { BranchHeader } from '@/components/layout/BranchHeader';
 import { useAuth } from '@/hooks/useAuth';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 export default function BranchLayout({
   children,
@@ -11,13 +12,24 @@ export default function BranchLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { session, isLoading } = useAuth();
+  const { trackPageView } = useAnalytics();
 
   useEffect(() => {
     if (!isLoading && (!session || session.userType !== 'branch')) {
       router.push('/login');
     }
   }, [session, isLoading, router]);
+
+  // 페이지뷰 추적
+  useEffect(() => {
+    if (!session || !pathname) return;
+    const titleMap: Record<string, string> = {
+      '/branch/dashboard': '법인 대시보드',
+    };
+    trackPageView(pathname, titleMap[pathname] || pathname);
+  }, [pathname, session, trackPageView]);
 
   if (isLoading) {
     return (

@@ -54,6 +54,7 @@ import {
 import { MaterialUsage, RecoveryStatus, ProductRecovery, ProductRecoveryStatus } from '@/types';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/client';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 const STATUS_COLORS = {
   '회수대기': '#ef4444',
@@ -110,6 +111,7 @@ export default function AdminCSDashboardPage() {
   // 제품 데이터
   const { data: productData, getStats: getProductStats, getRecoveryTargets: getProductRecoveryTargets, updateStatus: updateProductStatus } = useProductRecovery();
   const { session } = useAuth();
+  const { trackEvent } = useAnalytics();
 
   // 법인 상세 보기 상태
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
@@ -561,6 +563,7 @@ export default function AdminCSDashboardPage() {
     setAppliedDateFrom(searchDateFrom);
     setAppliedDateTo(searchDateTo);
     setIsSearched(true);
+    trackEvent('search', 'action', { dateFrom: searchDateFrom, dateTo: searchDateTo, branch: selectedBranch }, '/admin-cs/dashboard');
   };
 
   // 선택된 법인의 자재 데이터
@@ -635,6 +638,7 @@ export default function AdminCSDashboardPage() {
     try {
       await updateMaterialStatus(item.id, newStatus, session.userCode);
       toast.success(`상태가 ${newStatus}(으)로 변경되었습니다.`);
+      trackEvent('status_change', 'action', { type: 'material', newStatus }, '/admin-cs/dashboard');
     } catch (error) {
       toast.error('상태 변경 중 오류가 발생했습니다.');
     }
@@ -647,6 +651,7 @@ export default function AdminCSDashboardPage() {
     try {
       await updateProductStatus(item.id, newStatus, session.userCode);
       toast.success(`상태가 ${newStatus}(으)로 변경되었습니다.`);
+      trackEvent('status_change', 'action', { type: 'product', newStatus }, '/admin-cs/dashboard');
     } catch (error) {
       toast.error('상태 변경 중 오류가 발생했습니다.');
     }

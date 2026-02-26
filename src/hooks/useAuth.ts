@@ -143,6 +143,9 @@ export function useAuth() {
       localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(sessionWithActivity));
       setSession(sessionWithActivity);
 
+      // 분석용 세션 ID 생성
+      localStorage.setItem(STORAGE_KEYS.ANALYTICS_SESSION_ID, crypto.randomUUID());
+
       if (data.requirePasswordChange) {
         setRequirePasswordChange(true);
       }
@@ -229,6 +232,7 @@ export function useAuth() {
   // 로그아웃
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEYS.SESSION);
+    localStorage.removeItem(STORAGE_KEYS.ANALYTICS_SESSION_ID);
     setSession(null);
     setRequirePasswordChange(false);
   }, []);

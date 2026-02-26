@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { AdminQualityNav } from '@/components/layout/AdminQualityNav';
 import { useAuth } from '@/hooks/useAuth';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 export default function AdminQualityLayout({
   children,
@@ -11,13 +12,25 @@ export default function AdminQualityLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { session, isLoading } = useAuth();
+  const { trackPageView } = useAnalytics();
 
   useEffect(() => {
     if (!isLoading && (!session || session.userType !== 'admin_quality')) {
       router.push('/login');
     }
   }, [session, isLoading, router]);
+
+  // 페이지뷰 추적
+  useEffect(() => {
+    if (!session || !pathname) return;
+    const titleMap: Record<string, string> = {
+      '/admin-quality/dashboard': '품질관리 대시보드',
+      '/admin-quality/receive': '입고 관리',
+    };
+    trackPageView(pathname, titleMap[pathname] || pathname);
+  }, [pathname, session, trackPageView]);
 
   if (isLoading) {
     return (

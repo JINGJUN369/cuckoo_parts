@@ -380,3 +380,99 @@ export interface AutoRecoveryModelConfig {
   created_at: string;
   created_by?: string;
 }
+
+// =============================================
+// 사용 분석 (Analytics) 관련 타입
+// =============================================
+
+// 페이지뷰 기록
+export interface AnalyticsPageView {
+  id: string;
+  user_code: string;
+  user_type: UserType;
+  branch_code?: string;
+  page_path: string;
+  page_title?: string;
+  session_id: string;
+  duration_seconds: number;
+  referrer_page?: string;
+  created_at: string;
+}
+
+// 이벤트 타입
+export type AnalyticsEventType =
+  | 'upload_excel'
+  | 'status_change'
+  | 'bulk_status_change'
+  | 'search'
+  | 'send_email'
+  | 'export_data'
+  | 'login'
+  | 'logout';
+
+export type AnalyticsEventCategory = 'navigation' | 'action' | 'system';
+
+// 이벤트 기록
+export interface AnalyticsEvent {
+  id: string;
+  user_code: string;
+  user_type: UserType;
+  branch_code?: string;
+  event_type: AnalyticsEventType;
+  event_category: AnalyticsEventCategory;
+  event_data?: Record<string, unknown>;
+  page_path?: string;
+  session_id: string;
+  created_at: string;
+}
+
+// 대시보드용 집계 타입
+export interface AnalyticsSummary {
+  totalVisits: number;
+  uniqueVisitors: number;
+  avgSessionDuration: number;
+  activeBranches: number;
+}
+
+export interface HourlyDistribution {
+  hour: number;
+  count: number;
+}
+
+export interface DailyVisitors {
+  date: string;
+  total: number;
+  unique: number;
+}
+
+export interface RoleDistribution {
+  role: UserType;
+  label: string;
+  count: number;
+}
+
+export interface FeatureUsage {
+  event_type: string;
+  label: string;
+  count: number;
+}
+
+export interface PageViewRanking {
+  page_path: string;
+  page_title: string;
+  count: number;
+  avg_duration: number;
+}
+
+export interface BranchAccessFrequency {
+  branch_code: string;
+  branch_name?: string;
+  count: number;
+  last_access: string;
+}
+
+export interface HeatmapCell {
+  day: number;
+  hour: number;
+  value: number;
+}

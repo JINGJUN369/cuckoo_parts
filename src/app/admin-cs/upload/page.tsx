@@ -35,6 +35,7 @@ import {
   isAutoRecoveryModel,
 } from '@/hooks/useProductRecovery';
 import { useAuth } from '@/hooks/useAuth';
+import { useAnalytics } from '@/hooks/useAnalytics';
 import { ParsedExcelRow, ParsedRemovalExcelRow, ParsedDefectExchangeExcelRow, ProductRecoveryType } from '@/types';
 import { supabase } from '@/lib/supabase/client';
 import { toast } from 'sonner';
@@ -168,6 +169,7 @@ export default function UploadPage() {
     autoRecoveryPrefixes,
   } = useProductRecovery();
   const { session } = useAuth();
+  const { trackEvent } = useAnalytics();
 
   // 회수대상 자재 수
   const activeMaterialCount = getActiveMaterials().length;
@@ -277,6 +279,13 @@ export default function UploadPage() {
       setMaterialUploadResult(result);
 
       toast.success(`업로드 완료: 저장 ${result.saved.toLocaleString()}건, 폐기 ${result.discarded.toLocaleString()}건`);
+      trackEvent('upload_excel', 'action', {
+        type: 'material',
+        fileName: materialFile?.name,
+        totalRows: result.total,
+        savedRows: result.saved,
+        discardedRows: result.discarded,
+      }, '/admin-cs/upload');
     } catch (error) {
       console.error('Upload error:', error);
       const errMsg = error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
@@ -388,6 +397,12 @@ export default function UploadPage() {
       setProductUploadResult(result);
 
       toast.success(`업로드 완료: 저장 ${result.saved}건, 자동선택 ${result.autoSelected}건`);
+      trackEvent('upload_excel', 'action', {
+        type: 'product',
+        totalRows: result.total,
+        savedRows: result.saved,
+        autoSelectedRows: result.autoSelected,
+      }, '/admin-cs/upload');
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('업로드 중 오류가 발생했습니다.');
