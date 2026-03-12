@@ -26,6 +26,7 @@ export function useTechnicianNames(branchCode?: string) {
         .order('technician_code');
 
       if (error) throw error;
+      console.log('[TechnicianNames] 로드 완료:', branchCode, '→', data?.length, '건');
       setTechnicianNames(data || []);
     } catch (error) {
       console.error('기사 이름 로드 오류:', error);

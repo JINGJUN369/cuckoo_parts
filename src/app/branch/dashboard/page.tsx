@@ -1295,7 +1295,7 @@ export default function BranchDashboardPage() {
                       {waitingByTechnician.map(([techCode, items]) => (
                         <div key={techCode} className="border rounded-lg p-4">
                           <div className="flex items-center gap-2 mb-3 pb-2 border-b">
-                            <Badge className="text-base px-3 py-1">{techCode}</Badge>
+                            <Badge className="text-base px-3 py-1">{getDisplayName(techCode)}</Badge>
                             <span className="text-muted-foreground">({items.length}건)</span>
                           </div>
                           <Table>
@@ -2272,7 +2272,7 @@ export default function BranchDashboardPage() {
                 <thead>
                   <tr>
                     <th>요청번호</th>
-                    <th>기사코드</th>
+                    <th>기사</th>
                     <th>자재코드</th>
                     <th>자재명</th>
                     <th>수량</th>
@@ -2421,7 +2421,7 @@ export default function BranchDashboardPage() {
                 <thead>
                   <tr>
                     <th>요청번호</th>
-                    <th>기사코드</th>
+                    <th>기사</th>
                     <th>자재코드</th>
                     <th>자재명</th>
                     <th>수량</th>
@@ -2458,7 +2458,7 @@ export default function BranchDashboardPage() {
                 <thead>
                   <tr>
                     <th>요청번호</th>
-                    <th>기사코드</th>
+                    <th>기사</th>
                     <th>자재코드</th>
                     <th>자재명</th>
                     <th>운송회사</th>
@@ -2613,7 +2613,7 @@ export default function BranchDashboardPage() {
                 <tr>
                   <th style={{ width: '5%' }}>No.</th>
                   <th style={{ width: '15%' }}>요청번호</th>
-                  <th style={{ width: '10%' }}>기사코드</th>
+                  <th style={{ width: '10%' }}>기사</th>
                   <th style={{ width: '15%' }}>자재코드</th>
                   <th style={{ width: '35%' }}>자재명</th>
                   <th style={{ width: '10%' }}>수량</th>
