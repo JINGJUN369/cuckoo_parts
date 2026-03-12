@@ -5,7 +5,7 @@ export type UserType = 'admin_cs' | 'admin_quality' | 'branch';
 export type RecoveryStatus = '회수대기' | '회수완료' | '발송' | '입고완료' | '발송불가';
 
 // 발송불가 사유 타입
-export type CancelReason = '분실' | '파손' | '재사용' | '기타';
+export type CancelReason = '분실' | '파손' | '재사용' | '택배사 인수거부' | '기타';
 
 // 세션 정보
 export interface UserSession {

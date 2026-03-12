@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { LogOut } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -31,14 +31,24 @@ export function BranchHeader() {
             </p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          className="text-white hover:text-white hover:bg-white/20"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          로그아웃
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            className="text-white hover:text-white hover:bg-white/20"
+            onClick={() => router.push('/branch/settings')}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            설정
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-white hover:text-white hover:bg-white/20"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            로그아웃
+          </Button>
+        </div>
       </div>
     </header>
   );

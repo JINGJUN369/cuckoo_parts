@@ -29,6 +29,7 @@ const CANCEL_REASONS: { value: CancelReason; label: string; description: string 
   { value: '분실', label: '분실', description: '부품을 분실하여 발송할 수 없음' },
   { value: '파손', label: '파손', description: '부품이 파손되어 발송할 수 없음' },
   { value: '재사용', label: '재사용', description: '부품을 재사용하여 발송하지 않음' },
+  { value: '택배사 인수거부', label: '택배사 인수거부', description: '제품 크기·중량 등의 문제로 택배사에서 인수를 거부함' },
   { value: '기타', label: '기타', description: '기타 사유로 발송할 수 없음' },
 ];
 

@@ -43,11 +43,12 @@ export function ShippingModal({
   const [carrier, setCarrier] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
 
+  const isDirectPickup = carrier === '연구소직접회수';
+  const isFreightDelivery = carrier === '화물용달발송';
+
   const handleConfirm = () => {
-    if (!carrier || !trackingNumber) {
-      return;
-    }
-    onConfirm(carrier, trackingNumber);
+    if (!carrier || (!isDirectPickup && !trackingNumber)) return;
+    onConfirm(carrier, isDirectPickup ? '-' : trackingNumber);
     setCarrier('');
     setTrackingNumber('');
     onClose();
@@ -95,19 +96,39 @@ export function ShippingModal({
                       {c.name}
                     </SelectItem>
                   ))}
+                <SelectItem value="화물용달발송">화물용달발송</SelectItem>
+                <SelectItem value="연구소직접회수">연구소직접회수</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="trackingNumber">송장번호</Label>
-            <Input
-              id="trackingNumber"
-              value={trackingNumber}
-              onChange={(e) => setTrackingNumber(e.target.value)}
-              placeholder="송장번호를 입력하세요"
-            />
-          </div>
+          {!isDirectPickup && !isFreightDelivery && (
+            <div className="space-y-2">
+              <Label htmlFor="trackingNumber">송장번호</Label>
+              <Input
+                id="trackingNumber"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="송장번호를 입력하세요"
+              />
+            </div>
+          )}
+          {isFreightDelivery && (
+            <div className="space-y-2">
+              <Label htmlFor="trackingNumber">용달기사 전화번호</Label>
+              <Input
+                id="trackingNumber"
+                value={trackingNumber}
+                onChange={(e) => setTrackingNumber(e.target.value)}
+                placeholder="예: 010-1234-5678"
+              />
+            </div>
+          )}
+          {isDirectPickup && (
+            <p className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-lg">
+              연구소직접회수는 송장번호 입력이 필요하지 않습니다.
+            </p>
+          )}
         </div>
 
         <DialogFooter>
@@ -116,7 +137,7 @@ export function ShippingModal({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!carrier || !trackingNumber}
+            disabled={!carrier || (!isDirectPickup && !trackingNumber)}
           >
             발송 완료
           </Button>

@@ -21,6 +21,14 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StatCard } from '@/components/common/StatCard';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { ShippingModal } from '@/components/modals/ShippingModal';
@@ -32,6 +40,7 @@ import { useMaterialUsage } from '@/hooks/useMaterialUsage';
 import { useProductRecovery } from '@/hooks/useProductRecovery';
 import { useAuth } from '@/hooks/useAuth';
 import { MaterialUsage, Carrier, CancelReason, ProductRecovery, ProductRecoveryStatus } from '@/types';
+import { useTechnicianNames } from '@/hooks/useTechnicianNames';
 import { toast } from 'sonner';
 
 // 온보딩 투어 단계 정의 (15단계 - 업그레이드)
@@ -250,6 +259,11 @@ export default function BranchDashboardPage() {
   // 인쇄 모드 상태
   const [printMode, setPrintMode] = useState<'combined' | 'material' | 'product' | 'packing-material' | 'packing-product' | null>(null);
 
+  // 내역출력 완료 추적 (일괄발송 전 출력 필수)
+  const [printedMaterialIds, setPrintedMaterialIds] = useState<Set<string>>(new Set());
+  const [printedProductIds, setPrintedProductIds] = useState<Set<string>>(new Set());
+  const [showPrintRequiredAlert, setShowPrintRequiredAlert] = useState<{ type: 'material' | 'product'; unprintedItems: string[] } | null>(null);
+
   // 투어 관련 상태
   const [activeTab, setActiveTab] = useState<string>('waiting');
   const [showDemoCollectModal, setShowDemoCollectModal] = useState(false);
@@ -271,6 +285,7 @@ export default function BranchDashboardPage() {
     getCarriers: getProductCarriers
   } = useProductRecovery();
   const { session } = useAuth();
+  const { getDisplayName } = useTechnicianNames(session?.branchCode);
 
   // 운송회사 목록 로드
   const loadCarriers = useCallback(async () => {
@@ -388,6 +403,17 @@ export default function BranchDashboardPage() {
   const productCollectedData = useMemo(() => searchedProductData.filter((item) => item.recovery_status === '회수완료'), [searchedProductData]);
   const productShippedData = useMemo(() => searchedProductData.filter((item) => item.recovery_status === '발송'), [searchedProductData]);
   const productCancelledData = useMemo(() => searchedProductData.filter((item) => item.recovery_status === '발송불가'), [searchedProductData]);
+
+  // 제품 사원번호별 회수대기 그룹화
+  const productWaitingByEmployee = useMemo(() => {
+    const groups: Record<string, ProductRecovery[]> = {};
+    productWaitingData.forEach(item => {
+      const key = item.employee_number || '미지정';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [productWaitingData]);
 
   // 기사코드별 회수대기 그룹화
   const waitingByTechnician = useMemo(() => {
@@ -607,13 +633,54 @@ export default function BranchDashboardPage() {
     }, 100);
   };
 
-  // 발송 내역 출력 (택배 동봉용)
+  // 발송 내역 출력 (택배 동봉용) + 출력 이력 추적
   const handlePackingPrint = (type: 'material' | 'product') => {
     setPrintMode(type === 'material' ? 'packing-material' : 'packing-product');
+    // 출력한 항목 ID 기록
+    if (type === 'material') {
+      setPrintedMaterialIds(prev => {
+        const next = new Set(prev);
+        selectedItems.forEach(id => next.add(id));
+        return next;
+      });
+    } else {
+      setPrintedProductIds(prev => {
+        const next = new Set(prev);
+        selectedProductItems.forEach(id => next.add(id));
+        return next;
+      });
+    }
     setTimeout(() => {
       window.print();
       setPrintMode(null);
     }, 100);
+  };
+
+  // 일괄발송 전 내역출력 여부 확인
+  const handleBulkShipWithCheck = (type: 'material' | 'product') => {
+    if (type === 'material') {
+      const unprintedIds = Array.from(selectedItems).filter(id => !printedMaterialIds.has(id));
+      if (unprintedIds.length > 0) {
+        const unprintedItems = unprintedIds.map(id => {
+          const item = collectedData.find(d => d.id === id);
+          return item ? `${item.request_number} (${item.material_name || item.material_code})` : id;
+        });
+        setShowPrintRequiredAlert({ type: 'material', unprintedItems });
+        return;
+      }
+      setShowBulkShippingModal(true);
+    } else {
+      const unprintedIds = Array.from(selectedProductItems).filter(id => !printedProductIds.has(id));
+      if (unprintedIds.length > 0) {
+        const unprintedItems = unprintedIds.map(id => {
+          const item = productCollectedData.find(d => d.id === id);
+          return item ? `${item.customer_number} (${item.model_name})` : id;
+        });
+        setShowPrintRequiredAlert({ type: 'product', unprintedItems });
+        return;
+      }
+      setShowBulkProductShippingModal(true);
+    }
   };
 
   // 선택된 자재 데이터 (발송대기)
@@ -1146,7 +1213,7 @@ export default function BranchDashboardPage() {
                     className={`p-3 rounded-lg border ${waiting > 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <Badge variant="outline" className="font-semibold">{tech}</Badge>
+                      <Badge variant="outline" className="font-semibold">{getDisplayName(tech)}</Badge>
                       <span className="text-xs text-muted-foreground">총 {total}건</span>
                     </div>
                     {/* 진행률 바 */}
@@ -1299,7 +1366,7 @@ export default function BranchDashboardPage() {
                           <Printer className="h-4 w-4 mr-2" />
                           내역출력 ({selectedItems.size})
                         </Button>
-                        <Button onClick={() => setShowBulkShippingModal(true)}>
+                        <Button onClick={() => handleBulkShipWithCheck('material')}>
                           <TruckIcon className="h-4 w-4 mr-2" />
                           선택 일괄발송 ({selectedItems.size})
                         </Button>
@@ -1355,7 +1422,7 @@ export default function BranchDashboardPage() {
                                   : '-'}
                               </TableCell>
                               <TableCell>
-                                <Badge variant="outline">{item.technician_code || '-'}</Badge>
+                                <Badge variant="outline">{getDisplayName(item.technician_code)}</Badge>
                               </TableCell>
                               <TableCell>{item.material_code}</TableCell>
                               <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
@@ -1439,7 +1506,7 @@ export default function BranchDashboardPage() {
                                 : '-'}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">{item.technician_code || '-'}</Badge>
+                              <Badge variant="outline">{getDisplayName(item.technician_code)}</Badge>
                             </TableCell>
                             <TableCell>{item.material_code}</TableCell>
                             <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
@@ -1498,7 +1565,7 @@ export default function BranchDashboardPage() {
                                 : '-'}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">{item.technician_code || '-'}</Badge>
+                              <Badge variant="outline">{getDisplayName(item.technician_code)}</Badge>
                             </TableCell>
                             <TableCell>{item.material_code}</TableCell>
                             <TableCell className="max-w-[150px] truncate">{item.material_name}</TableCell>
@@ -1597,54 +1664,64 @@ export default function BranchDashboardPage() {
                 </TabsTrigger>
               </TabsList>
 
-              {/* 제품 회수대기 */}
+              {/* 제품 회수대기 - 사원별 그룹화 */}
               <TabsContent value="product-waiting">
                 <Card>
                   <CardHeader>
-                    <CardTitle>제품 회수대기 목록</CardTitle>
+                    <CardTitle>제품 회수대기 목록 (사원별)</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {productWaitingData.length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>유형</TableHead>
-                            <TableHead>고객번호</TableHead>
-                            <TableHead>고객명</TableHead>
-                            <TableHead>모델명</TableHead>
-                            <TableHead>요청지점</TableHead>
-                            <TableHead>해지요청일</TableHead>
-                            <TableHead className="w-[100px] print:hidden">액션</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {productWaitingData.map((item) => (
-                            <TableRow key={item.id}>
-                              <TableCell>
-                                <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
-                                  {item.recovery_type}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
-                              <TableCell>{item.customer_name}</TableCell>
-                              <TableCell>{item.model_name}</TableCell>
-                              <TableCell className="text-sm">{item.request_branch}</TableCell>
-                              <TableCell className="text-sm">{item.termination_request_date}</TableCell>
-                              <TableCell className="print:hidden">
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedProductItem(item);
-                                    setShowProductCollectModal(true);
-                                  }}
-                                >
-                                  회수완료
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    {productWaitingByEmployee.length > 0 ? (
+                      <div className="space-y-6">
+                        {productWaitingByEmployee.map(([empCode, items]) => (
+                          <div key={empCode} className="border rounded-lg p-4">
+                            <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+                              <Badge className="text-base px-3 py-1">{getDisplayName(empCode)}</Badge>
+                              <span className="text-muted-foreground">({items.length}건)</span>
+                            </div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>유형</TableHead>
+                                  <TableHead>고객번호</TableHead>
+                                  <TableHead>고객명</TableHead>
+                                  <TableHead>모델명</TableHead>
+                                  <TableHead>요청지점</TableHead>
+                                  <TableHead>해지요청일</TableHead>
+                                  <TableHead className="w-[100px] print:hidden">액션</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {items.map((item) => (
+                                  <TableRow key={item.id}>
+                                    <TableCell>
+                                      <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
+                                        {item.recovery_type}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
+                                    <TableCell>{item.customer_name}</TableCell>
+                                    <TableCell>{item.model_name}</TableCell>
+                                    <TableCell className="text-sm">{item.request_branch}</TableCell>
+                                    <TableCell className="text-sm">{item.termination_request_date}</TableCell>
+                                    <TableCell className="print:hidden">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => {
+                                          setSelectedProductItem(item);
+                                          setShowProductCollectModal(true);
+                                        }}
+                                      >
+                                        회수완료
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <p className="text-center py-8 text-muted-foreground">
                         해당 기간에 회수대기 건이 없습니다.
@@ -1670,7 +1747,7 @@ export default function BranchDashboardPage() {
                             <Printer className="h-4 w-4 mr-2" />
                             내역출력 ({selectedProductItems.size})
                           </Button>
-                          <Button onClick={() => setShowBulkProductShippingModal(true)}>
+                          <Button onClick={() => handleBulkShipWithCheck('product')}>
                             <TruckIcon className="h-4 w-4 mr-2" />
                             선택 일괄발송 ({selectedProductItems.size})
                           </Button>
@@ -1694,6 +1771,7 @@ export default function BranchDashboardPage() {
                               />
                             </TableHead>
                             <TableHead>유형</TableHead>
+                            <TableHead>사원번호</TableHead>
                             <TableHead>고객번호</TableHead>
                             <TableHead>고객명</TableHead>
                             <TableHead>모델명</TableHead>
@@ -1715,6 +1793,9 @@ export default function BranchDashboardPage() {
                                 <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
                                   {item.recovery_type}
                                 </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{getDisplayName(item.employee_number)}</Badge>
                               </TableCell>
                               <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
                               <TableCell>{item.customer_name}</TableCell>
@@ -1773,6 +1854,7 @@ export default function BranchDashboardPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>유형</TableHead>
+                            <TableHead>사원번호</TableHead>
                             <TableHead>고객번호</TableHead>
                             <TableHead>고객명</TableHead>
                             <TableHead>모델명</TableHead>
@@ -1789,6 +1871,9 @@ export default function BranchDashboardPage() {
                                 <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
                                   {item.recovery_type}
                                 </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{getDisplayName(item.employee_number)}</Badge>
                               </TableCell>
                               <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
                               <TableCell>{item.customer_name}</TableCell>
@@ -1828,6 +1913,7 @@ export default function BranchDashboardPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>유형</TableHead>
+                            <TableHead>사원번호</TableHead>
                             <TableHead>고객번호</TableHead>
                             <TableHead>고객명</TableHead>
                             <TableHead>모델명</TableHead>
@@ -1844,6 +1930,9 @@ export default function BranchDashboardPage() {
                                 <Badge variant={item.recovery_type === '철거' ? 'default' : 'secondary'}>
                                   {item.recovery_type}
                                 </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{getDisplayName(item.employee_number)}</Badge>
                               </TableCell>
                               <TableCell className="font-mono text-sm">{item.customer_number}</TableCell>
                               <TableCell>{item.customer_name}</TableCell>
@@ -2065,6 +2154,58 @@ export default function BranchDashboardPage() {
         isDemoMode={true}
       />
 
+      {/* 내역출력 필요 안내 팝업 */}
+      <Dialog open={!!showPrintRequiredAlert} onOpenChange={() => setShowPrintRequiredAlert(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-amber-600 flex items-center gap-2">
+              <Printer className="h-5 w-5" />
+              내역서 출력이 필요합니다
+            </DialogTitle>
+            <DialogDescription>
+              일괄발송 처리 전에 반드시 내역서를 출력하여 택배에 동봉해야 합니다.
+            </DialogDescription>
+          </DialogHeader>
+          {showPrintRequiredAlert && (
+            <div className="py-2 space-y-3">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-amber-800 mb-2">
+                  아래 {showPrintRequiredAlert.unprintedItems.length}건의 내역서가 출력되지 않았습니다:
+                </p>
+                <ul className="text-sm text-amber-700 space-y-1 max-h-[200px] overflow-y-auto">
+                  {showPrintRequiredAlert.unprintedItems.map((item, idx) => (
+                    <li key={idx} className="flex items-center gap-1">
+                      <XCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                [내역출력] 버튼을 먼저 클릭하여 출력한 후 발송 처리를 진행해주세요.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPrintRequiredAlert(null)}>
+              확인
+            </Button>
+            <Button
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={() => {
+                if (showPrintRequiredAlert) {
+                  handlePackingPrint(showPrintRequiredAlert.type);
+                }
+                setShowPrintRequiredAlert(null);
+              }}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              지금 내역출력
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 인쇄용 전용 영역 - 통합 */}
       {(printMode === 'combined' || printMode === null) && (
         <div className="hidden print:block print-area">
@@ -2093,7 +2234,7 @@ export default function BranchDashboardPage() {
               <h2>■ 자재 회수대기 목록</h2>
               {waitingByTechnician.map(([techCode, items]) => (
                 <div key={techCode} className="print-group">
-                  <h3>기사코드: {techCode} ({items.length}건)</h3>
+                  <h3>기사: {getDisplayName(techCode)} ({items.length}건)</h3>
                   <table>
                     <thead>
                       <tr>
@@ -2142,7 +2283,7 @@ export default function BranchDashboardPage() {
                   {collectedData.map((item) => (
                     <tr key={item.id}>
                       <td>{item.request_number}</td>
-                      <td>{item.technician_code || '-'}</td>
+                      <td>{getDisplayName(item.technician_code)}</td>
                       <td>{item.material_code}</td>
                       <td>{item.material_name}</td>
                       <td>{item.output_quantity}</td>
@@ -2243,7 +2384,7 @@ export default function BranchDashboardPage() {
               <h2>■ 회수대기 목록</h2>
               {waitingByTechnician.map(([techCode, items]) => (
                 <div key={techCode} className="print-group">
-                  <h3>기사코드: {techCode} ({items.length}건)</h3>
+                  <h3>기사: {getDisplayName(techCode)} ({items.length}건)</h3>
                   <table>
                     <thead>
                       <tr>
@@ -2296,7 +2437,7 @@ export default function BranchDashboardPage() {
                     return (
                       <tr key={item.id}>
                         <td>{item.request_number}</td>
-                        <td>{item.technician_code || '-'}</td>
+                        <td>{getDisplayName(item.technician_code)}</td>
                         <td>{item.material_code}</td>
                         <td>{item.material_name}</td>
                         <td>{item.output_quantity}</td>
@@ -2329,7 +2470,7 @@ export default function BranchDashboardPage() {
                   {shippedData.map((item) => (
                     <tr key={item.id}>
                       <td>{item.request_number}</td>
-                      <td>{item.technician_code || '-'}</td>
+                      <td>{getDisplayName(item.technician_code)}</td>
                       <td>{item.material_code}</td>
                       <td>{item.material_name}</td>
                       <td>{item.carrier}</td>
@@ -2484,7 +2625,7 @@ export default function BranchDashboardPage() {
                   <tr key={item.id}>
                     <td style={{ textAlign: 'center' }}>{idx + 1}</td>
                     <td>{item.request_number}</td>
-                    <td>{item.technician_code || '-'}</td>
+                    <td>{getDisplayName(item.technician_code)}</td>
                     <td>{item.material_code}</td>
                     <td>{item.material_name}</td>
                     <td style={{ textAlign: 'center' }}>{item.output_quantity}</td>

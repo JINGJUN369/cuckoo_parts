@@ -27,6 +27,7 @@ export default function BranchLayout({
     if (!session || !pathname) return;
     const titleMap: Record<string, string> = {
       '/branch/dashboard': '법인 대시보드',
+      '/branch/settings': '기사 코드-이름 설정',
     };
     trackPageView(pathname, titleMap[pathname] || pathname);
   }, [pathname, session, trackPageView]);
